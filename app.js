@@ -199,27 +199,79 @@
   fillCfg();
   function bm() {
     var bar = document.createElement('div');
-    bar.style.cssText = 'position:fixed;left:8px;right:8px;top:8px;z-index:2147483647;background:#4f5f52;color:#fff;padding:10px 12px;border-radius:10px;font:14px sans-serif;word-break:break-all';
+    bar.style.cssText = 'position:fixed;left:8px;right:8px;top:8px;z-index:2147483647;background:#4f5f52;color:#fff;padding:10px 12px;border-radius:10px;font:14px/1.5 sans-serif;word-break:break-all';
     bar.textContent = '賠率獵人:抓取中…'; document.body.appendChild(bar);
     var say = function (t, ms) { bar.textContent = t; if (ms) setTimeout(function () { bar.remove(); }, ms); };
     (async function () {
       try {
         var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
-        var txt = function () { var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), r = [], n; while ((n = w.nextNode())) { var p = n.parentElement; if (!p || /^(SCRIPT|STYLE|NOSCRIPT)$/.test(p.tagName) || p === bar) continue; var s = n.nodeValue.replace(/\s+/g, ' ').trim(); if (s) r.push(s); } return r.join('\n'); };
+        var frames = [], shadows = 0;
+        var txt = function () {
+          var r = []; frames = []; shadows = 0;
+          var walk = function (n) {
+            if (n.nodeType === 3) { var p = n.parentElement; if (p && !/^(SCRIPT|STYLE|NOSCRIPT)$/.test(p.tagName) && !bar.contains(p)) { var s = n.nodeValue.replace(/\s+/g, ' ').trim(); if (s) r.push(s); } return; }
+            if (n.nodeType !== 1 && n.nodeType !== 9 && n.nodeType !== 11) return;
+            if (n === bar) return;
+            if (n.nodeType === 1) {
+              if (/^(SCRIPT|STYLE|NOSCRIPT)$/.test(n.tagName)) return;
+              if (n.tagName === 'IFRAME') { var d = null; try { d = n.contentDocument; } catch (e) { } if (d && d.body) walk(d.body); else if (n.src) frames.push(n.src); return; }
+              if (n.shadowRoot) { shadows++; walk(n.shadowRoot); }
+            }
+            for (var c = n.firstChild; c; c = c.nextSibling) walk(c);
+          };
+          walk(document.body); return r.join('\n');
+        };
         var root = function () { return document.scrollingElement || document.body; };
         var grab = async function () { var h = 0; for (var i = 0; i < 12; i++) { root().scrollTo(0, root().scrollHeight); await sleep(350); if (root().scrollHeight === h) break; h = root().scrollHeight; } root().scrollTo(0, 0); return txt(); };
         var find = function (re) { return Array.prototype.filter.call(document.querySelectorAll('button,a,div,span,li,p'), function (e) { return e.children.length <= 1 && re.test((e.innerText || '').trim()); }); };
-        var out = await grab(), msg = '只抓到目前畫面(沒找到明天分頁)';
-        var nx = find(/^星期[一二三四五六日]\s*\d{1,2},\s*\d{1,2}$/)[0];
-        if (nx) { var before = out; say('賠率獵人:切換到明天…'); nx.click(); for (var i = 0; i < 14; i++) { await sleep(500); if (i >= 2 && txt() !== before) break; } out += '\n' + await grab(); msg = '今天+明天'; var td = find(/^今天$/)[0]; if (td) td.click(); }
-        var lines = out.split('\n').length;
-        var manual = function () {
-          bar.remove(); var w = document.createElement('div'); w.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#fff;padding:12px;display:flex;flex-direction:column;gap:8px';
-          var t = document.createElement('textarea'); t.value = out; t.style.cssText = 'flex:1;width:100%;font-size:12px';
-          var b = document.createElement('button'); b.textContent = '複製全部並關閉(' + lines + ' 行)'; b.style.cssText = 'padding:14px;font-size:16px';
-          b.onclick = function () { t.select(); try { document.execCommand('copy'); } catch (e) { } w.remove(); }; w.appendChild(t); w.appendChild(b); document.body.appendChild(w);
+        var scan = function () {
+          var els = Array.prototype.slice.call(document.querySelectorAll('[aria-label*="odds"]')), rows = new Map(), res = [];
+          els.forEach(function (el) {
+            var m = (el.getAttribute('aria-label') || '').match(/^([\s\S]+?)\s*-\s*([\s\S]+?)\s*-\s*odds\s*([\d.]+)\s*$/i); if (!m) return;
+            var c = el, r = null; for (var i = 0; i < 20 && c; i++) { if (c.querySelector && c.querySelector('[data-test-id="chip-event-header"]')) { r = c; break; } c = c.parentElement; }
+            if (!r) return;
+            if (!rows.has(r)) { var lb = r.querySelector('[data-test-id="chip-event-header"] label'); rows.set(r, { id: lb ? lb.textContent.trim() : '', t: (r.textContent || '').replace(/\s+/g, ' '), mk: {} }); }
+            var d = rows.get(r); (d.mk[m[1].trim()] = d.mk[m[1].trim()] || []).push({ s: m[2].trim(), o: parseFloat(m[3]) });
+          });
+          var now = new Date();
+          rows.forEach(function (d) {
+            var ml = null, u = 0;
+            Object.keys(d.mk).forEach(function (k) { var s = d.mk[k]; if (s.some(function (x) { return x.s === '和局'; })) ml = s; var us = s.filter(function (x) { return x.s.indexOf('小') >= 0; })[0]; if (us) u = us.o; });
+            if (!ml || !d.id) return;
+            var dr = ml.filter(function (x) { return x.s === '和局'; })[0], t = ml.filter(function (x) { return x.s !== '和局'; });
+            if (!dr || t.length < 2) return;
+            var dm = d.t.match(/(\d{1,2})\s*(\d{1,2})月/), tm = d.t.match(/(\d{1,2}):(\d{2})/), md = '';
+            if (dm && tm) { var y = now.getFullYear(), mo = +dm[2], dd = +dm[1], cand = new Date(y, mo - 1, dd), diff = (cand - now) / 864e5; if (diff < -200) y++; else if (diff > 200) y--; md = y + '-' + (mo < 10 ? '0' : '') + mo + '-' + (dd < 10 ? '0' : '') + dd + ' ' + (tm[1].length < 2 ? '0' : '') + tm[1] + ':' + tm[2]; }
+            res.push({ matchId: d.id, awayTeam: t[0].s, oddsAway: t[0].o, homeTeam: t[1].s, oddsHome: t[1].o, oddsDraw: dr.o, oddsUnder: u || null, matchDate: md });
+          });
+          return res;
         };
-        if (navigator.clipboard && navigator.clipboard.writeText) { try { await navigator.clipboard.writeText(out); say('已複製 ' + lines + ' 行(' + msg + '),回到賠率獵人按「貼上匯入」', 6000); } catch (e) { manual(); } } else manual();
+        var merge = function (A, B) { var seen = {}; return A.concat(B).filter(function (m) { var k = m.matchId + '|' + m.matchDate; if (seen[k]) return false; seen[k] = 1; return true; }); };
+        var out = await grab(), got = scan();
+        var hasRows = got.length > 0 || /\d{1,2}\s*\d{1,2}\s*月/.test(out) && (out.match(/\b\d{1,3}\.\d{2}\b/g) || []).length >= 6;
+        if (!hasRows) {
+          bar.remove(); var w = document.createElement('div'); w.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#fff;color:#222;padding:14px;overflow:auto;font:14px/1.6 sans-serif';
+          var h = '<b>這一層頁面沒有賽事</b><div style="margin:6px 0">共 ' + out.split('\n').length + ' 行文字;內嵌框架 ' + frames.length + ' 個;shadow 節點 ' + shadows + ' 個。</div>';
+          if (frames.length) { h += '<div>賽事表在另一個網頁框架裡,書籤不能直接讀取。請點下面的網址在此分頁開啟,<b>開啟後再按一次書籤</b>:</div>'; frames.forEach(function (u) { h += '<p style="word-break:break-all"><a href="' + u.replace(/"/g, '&quot;') + '" target="_top" style="color:#06c">' + u.replace(/</g, '&lt;') + '</a></p>'; }); }
+          h += '<div style="margin-top:10px"><button id="ohx" style="padding:12px 16px;font-size:15px">關閉</button> <button id="ohc" style="padding:12px 16px;font-size:15px">複製這份報告</button></div>';
+          w.innerHTML = h; document.body.appendChild(w);
+          var rep = '頁面報告\nURL: ' + location.href + '\n框架: ' + frames.join(' ; ') + '\nshadow: ' + shadows + '\n文字行數: ' + out.split('\n').length;
+          w.querySelector('#ohx').onclick = function () { w.remove(); };
+          w.querySelector('#ohc').onclick = function () { var t = document.createElement('textarea'); t.value = rep; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch (e) { } t.remove(); };
+          return;
+        }
+        var msg = '只抓到目前畫面(沒找到明天分頁)';
+        var nx = find(/^星期[一二三四五六日]\s*\d{1,2},\s*\d{1,2}$/)[0];
+        if (nx) { var before = out; say('賠率獵人:切換到明天…'); nx.click(); for (var i = 0; i < 14; i++) { await sleep(500); if (i >= 2 && txt() !== before) break; } out += '\n' + await grab(); got = merge(got, scan()); msg = '今天+明天'; var td = find(/^今天$/)[0]; if (td) td.click(); }
+        if (got.length) { out = JSON.stringify(got); msg += ',' + got.length + ' 場'; }
+        var lines = got.length || out.split('\n').length;
+        var manual = function () {
+          bar.remove(); var w2 = document.createElement('div'); w2.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#fff;padding:12px;display:flex;flex-direction:column;gap:8px';
+          var t = document.createElement('textarea'); t.value = out; t.style.cssText = 'flex:1;width:100%;font-size:12px';
+          var b = document.createElement('button'); b.textContent = '複製全部並關閉(' + lines + ')'; b.style.cssText = 'padding:14px;font-size:16px';
+          b.onclick = function () { t.select(); try { document.execCommand('copy'); } catch (e) { } w2.remove(); }; w2.appendChild(t); w2.appendChild(b); document.body.appendChild(w2);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) { try { await navigator.clipboard.writeText(out); say('已複製 ' + lines + (got.length ? ' 場' : ' 行') + '(' + msg + '),回到賠率獵人按「貼上匯入」', 6000); } catch (e) { manual(); } } else manual();
       } catch (e) { say('抓取失敗:' + (e && e.message)); }
     })();
   }
