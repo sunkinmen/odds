@@ -115,6 +115,20 @@
     }
     return out;
   }
+  /* ---- 機器學習校準模型 v1(多項邏輯迴歸):用 2025-01~2026-10 逐月樣本外預測訓練。
+     特徵:log(市場去水位機率)×3,加上四層「與市場的差距×樣本可信度」×12;輸出強隊勝/和/強隊負。
+     樣本外回測(2026,2.2 萬場)log loss 0.9934,比市場基準 0.9982 好 0.0048;梯度提升模型較差(0.9945),所以採用此版。 */
+  const ML_W = [[0.449145,-0.691981,-0.64648,0.092111,-0.014851,-0.077261,0.07238,0.021289,-0.093668,0.174433,-0.323385,0.148952,-0.090438,-0.13156,0.221998],[-0.218969,1.010789,-0.337303,-0.020008,0.12192,-0.101912,0.024004,-0.017321,-0.006683,-0.206161,-0.005307,0.211468,0.136048,0.041259,-0.177307],[-0.230176,-0.318808,0.983782,-0.072103,-0.107069,0.179173,-0.096384,-0.003968,0.100352,0.031728,0.328692,-0.36042,-0.04561,0.090301,-0.044691]];
+  const ML_B = [-0.998334, 0.533032, 0.465302];
+  function mlProb(pm, L) {
+    const x = pm.map(v => Math.log(Math.min(1, Math.max(1e-4, v))));
+    ['L1', 'L2', 'L3', 'L4'].forEach(k => {
+      const n = L[k].n, s = Math.min(n, 60) / (Math.min(n, 60) + 20);
+      for (let j = 0; j < 3; j++) x.push(((n > 0 ? L[k].c[j] / n : pm[j]) - pm[j]) * s);
+    });
+    const z = ML_W.map((w, j) => w.reduce((t, v, i) => t + v * x[i], ML_B[j])), mx = Math.max(...z), ex = z.map(v => Math.exp(v - mx)), s = ex[0] + ex[1] + ex[2];
+    return ex.map(v => v / s);
+  }
   function adaptive(fn, minN, tols) {
     let r = null, t = tols[0];
     for (t of tols) { r = fn(t); if (r.n >= minN) break; }
@@ -171,7 +185,8 @@
     const K = opt.priorWeight || 150, Wt = { L1: 1, L2: 0.5, L3: 1, L4: 0.5 };
     const acc = pm.map(x => x * K); let tw = K;
     ['L1', 'L2', 'L3', 'L4'].forEach(k => { const w = Wt[k] * Math.min(L[k].n, 60) / Math.max(L[k].n, 1); for (let j = 0; j < 3; j++) acc[j] += w * L[k].c[j]; tw += w * L[k].n; });
-    const p = acc.map(x => x / tw);
+    const pBlend = acc.map(x => x / tw);
+    const p = opt.noML ? pBlend : mlProb(pm, L);   // 預設套用機器學習校準
     // 小分
     let pu = null;
     if (m.ou > 0) {
@@ -199,7 +214,7 @@
     return {
       tail, scoreSum, resolved: { home: H, away: A, leagueId, league: leagueId >= 0 ? db.leagues[leagueId] : null },
       strongHome, strongName: strongHome ? m.home : m.away, weakName: strongHome ? m.away : m.home,
-      layers: L, anomaly, pm, p, pu, qS,
+      layers: L, anomaly, pm, p, pBlend, pu, qS,
       oddsBySide: strongHome ? { 0: m.oh, 1: m.od, 2: m.oa } : { 0: m.oa, 1: m.od, 2: m.oh },
       // 轉成「主/和/客」選項
       toHDA(idx) { return strongHome ? ['主', '和', '客'][idx] : ['客', '和', '主'][idx]; },
@@ -222,6 +237,6 @@
     return { all: cand, best: ok[0] || null };
   }
 
-  const api = { load, analyze, pickBest, resolveTeam, norm, MIN_N, histRoi };
+  const api = { load, analyze, mlProb, pickBest, resolveTeam, norm, MIN_N, histRoi };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OH = api;
 })(typeof self !== 'undefined' ? self : this);
