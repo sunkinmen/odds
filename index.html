@@ -70,7 +70,7 @@ details.note p{margin:8px 2px 0;line-height:1.6;color:var(--ink)}
 .lg{font-size:11px;color:var(--mute);letter-spacing:.03em}
 .teams{font-weight:650;font-size:16px;line-height:1.35;margin:1px 0 8px}
 .teams .at{color:var(--mute);font-weight:400;margin:0 5px;font-size:13px}
-.odds{display:grid;grid-template-columns:repeat(3,1fr) .8fr;gap:6px}
+.odds{display:grid;grid-template-columns:repeat(3,1fr) .8fr .8fr;gap:5px}
 .o{border:1px solid var(--line);border-radius:11px;padding:5px 0 4px;text-align:center;font-variant-numeric:tabular-nums;font-weight:650;font-size:15px;line-height:1.2;background:var(--bg)}
 .o i{display:block;font-style:normal;font-size:10.5px;font-weight:500;color:var(--mute);letter-spacing:.1em}
 .o.hit{background:var(--deep);border-color:var(--deep);color:#f3efe9}
@@ -151,7 +151,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 <div class="top">
   <div class="brand">
     <div class="mark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
-    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.9</small></div>
+    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.11</small></div>
   </div>
   <div class="days" id="days"></div>
 </div>
@@ -159,12 +159,12 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 <main id="tab-matches" class="wrap">
   <div class="row" style="margin-top:2px">
     <button class="btn sm" id="bSync">更新賽事</button>
-    <button class="btn alt sm" id="bPaste">貼上匯入</button>
-    <button class="btn alt sm" id="bHelp">抓取教學</button>
-    <button class="btn alt sm" id="bAdd">手動新增</button>
     <span class="grow"></span>
     <button class="btn line sm" id="bClear">清空</button>
   </div>
+  <details class="note" style="margin-top:8px"><summary>進階:手動匯入</summary>
+    <div class="row" style="margin-top:8px"><button class="btn alt sm" id="bPaste">貼上匯入</button><button class="btn alt sm" id="bHelp">抓取說明</button><button class="btn alt sm" id="bAdd">手動新增</button></div>
+  </details>
   <div class="panel" id="importBox" style="display:none">
     <label class="f" style="margin-top:0">貼上書籤抓到的內容、運彩頁面文字、擴充功能的 JSON,或每行一場「主隊 客隊 主勝 和 客勝 小分 [20:30] [日期]」。沒有日期的場次歸入目前選的那天。</label>
     <textarea id="txt" placeholder="曼城 利物浦 2.1 3.4 3.2 1.9 22:00"></textarea>
@@ -253,21 +253,22 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
   <div class="panel">
     <label class="f" style="margin-top:0">API 金鑰(免費,從 aistudio.google.com 取得)</label>
     <input id="sGKey" type="password" autocomplete="off" placeholder="貼上你的金鑰">
-    <label class="f">模型</label>
-    <input id="sGModel" placeholder="gemini-2.5-flash">
+    <label class="f">模型(不寫死,由金鑰實際可用清單決定)</label>
+    <select id="sGModelSel"></select>
     <label class="row" style="margin-top:10px;gap:8px"><input type="checkbox" id="sGSearch" style="width:auto"><span style="font-size:13.5px">用 Google 搜尋補充傷兵/陣容消息(較慢、較耗免費額度)</span></label>
-    <div class="row" style="margin-top:8px"><button class="btn alt sm" id="sGSave">儲存</button><button class="btn line sm" id="sGClear">清除金鑰</button></div>
+    <div class="row" style="margin-top:8px"><button class="btn alt sm" id="sGList">載入模型清單</button><button class="btn alt sm" id="sGTest">測試連線</button><button class="btn sm" id="sGSave">儲存</button><button class="btn line sm" id="sGClear">清除金鑰</button></div>
+    <div class="hint" id="sGMsg"></div>
     <div class="hint">金鑰只存在這支手機的瀏覽器裡,只會送到 Google 的 API,不經過其他伺服器。送出的內容是賽事名稱、賠率與模型數字。免費額度有每分鐘與每日上限,超過時會顯示錯誤,稍後再試。</div>
   </div>
 
   <div class="sec">運彩官網書籤(備用)</div>
-  <div class="panel">
+  <details class="panel" style="padding:10px 14px"><summary style="cursor:pointer;font-size:13px;color:var(--mute)">展開(一般用不到,自動抓取已涵蓋)</summary>
     <div class="hint" style="margin-top:0">在運彩「每日賽事 → 足球」頁面開這個書籤,會讀取畫面文字、自動切到明天再讀一次,全部複製到剪貼簿。它只讀你眼前的頁面,不會送出任何資料。</div>
     <pre id="bm"></pre>
     <div class="row" style="margin-top:8px"><button class="btn" id="bmCopy">複製抓取書籤</button></div>
     <label class="f">先測試你的瀏覽器能不能執行書籤(開了應該跳出「書籤可以執行」)</label><pre id="bmTest">javascript:alert('書籤可以執行')</pre>
     <div class="hint">手機瀏覽器不能直接貼上 javascript: 網址時:先把任一頁存成書籤,再把書籤的網址改成剛複製的內容。</div>
-  </div>
+  </details>
 </main>
 
 <nav id="nav">
@@ -295,11 +296,11 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
   btns.forEach(function(b){b.addEventListener('click',function(){go(b.getAttribute('data-t'))})});
 })();
 </script>
-<script src="engine.js?v=39"></script>
-<script src="parlay.js?v=39"></script>
-<script src="advisor.js?v=39"></script>
-<script src="importer.js?v=39"></script>
-<script src="dataload.js?v=39"></script>
-<script src="app.js?v=39"></script>
+<script src="engine.js?v=311"></script>
+<script src="parlay.js?v=311"></script>
+<script src="advisor.js?v=311"></script>
+<script src="importer.js?v=311"></script>
+<script src="dataload.js?v=311"></script>
+<script src="app.js?v=311"></script>
 </body>
 </html>

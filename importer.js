@@ -12,7 +12,7 @@
       const t = parseDT(x.matchDate);
       return {
         id: x.matchId || ('M' + i), league: x.league || '', home: x.homeTeam, away: x.awayTeam,
-        oh: +x.oddsHome, od: +x.oddsDraw, oa: +x.oddsAway, ou: x.oddsUnder ? +x.oddsUnder : 0,
+        oh: +x.oddsHome, od: +x.oddsDraw, oa: +x.oddsAway, ou: x.oddsUnder ? +x.oddsUnder : 0, ov: x.oddsOver ? +x.oddsOver : 0, lines: x.lines || null,
         minLeg: x.minLeg ? +x.minLeg : 0, ...t, display: x.matchDateDisplay || ''
       };
     }).filter(m => m.home && m.away && m.oh > 1 && m.od > 1 && m.oa > 1);
@@ -121,12 +121,12 @@
     }
   }
   /* 玩運彩「預測比例」頁(足球 運彩盤)解析。自成一體,可直接 toString 放進書籤。
-   * doc: 頁面 DOM;gt: 'YYYYMMDD'。回傳 [賽事編號, 客隊, 客賠, 主隊, 主賠, 和賠, 小分(2.5)賠, 'YYYY-MM-DD HH:MM', 聯賽] */
+   * doc: 頁面 DOM;gt: 'YYYYMMDD'。回傳 [賽事編號, 客隊, 客賠, 主隊, 主賠, 和賠, 小分(2.5)賠, 'YYYY-MM-DD HH:MM', 聯賽, 大分(2.5)賠, {'3.5':[大,小],'4.5':[大,小]}] */
   function parsePS(doc, gt) {
     const g = {}, order = [], tx = e => e ? e.textContent.replace(/\s+/g, ' ').trim() : '';
     doc.querySelectorAll('tr[gameid]').forEach(function (tr) {
       const id = tr.getAttribute('gameid'); let o = g[id];
-      if (!o) { o = g[id] = { teams: [], od: {}, ou: 0 }; order.push(id); }
+      if (!o) { o = g[id] = { teams: [], od: {}, ou: 0, ov: 0, ln: {} }; order.push(id); }
       const gi = tr.querySelector('.td-gameinfo');
       if (gi) { o.league = tx(gi.querySelector('p')); o.no = tx(gi.querySelector('h3')); o.tm = tx(gi.querySelector('h4')); }
       const t = tr.querySelector('.td-teaminfo'); if (t && tx(t)) o.teams.push(tx(t));
@@ -134,6 +134,8 @@
       tr.querySelectorAll('.td-bank-bet02').forEach(function (td) {
         const side = tx(td.querySelector('.team-side')), line = tx(td.querySelector('.data-wrap strong')), v = parseFloat(tx(td.querySelector('.data-wrap span')).replace(/[^\d.]/g, ''));
         if (side === '小' && line === '2.5' && v > 1) o.ou = v;
+        if (side === '大' && line === '2.5' && v > 1) o.ov = v;
+        if ((line === '3.5' || line === '4.5') && v > 1 && (side === '大' || side === '小')) (o.ln[line] = o.ln[line] || [0, 0])[side === '大' ? 0 : 1] = v;
       });
     });
     const out = [], d = gt.slice(0, 4) + '-' + gt.slice(4, 6) + '-' + gt.slice(6, 8);
@@ -141,7 +143,7 @@
       const o = g[id], m = (o.tm || '').match(/([AP])M\s*(\d+):(\d+)/);
       if (o.teams.length < 2 || !(o.od['客'] > 1 && o.od['主'] > 1 && o.od['和'] > 1)) return;
       const hh = m ? (+m[2] === 12 ? 0 : +m[2]) + (m[1] === 'P' ? 12 : 0) : 0;
-      out.push([id, o.teams[0], o.od['客'], o.teams[1], o.od['主'], o.od['和'], o.ou, d + ' ' + String(hh).padStart(2, '0') + ':' + (m ? m[3] : '00'), o.league || '']);
+      out.push([id, o.teams[0], o.od['客'], o.teams[1], o.od['主'], o.od['和'], o.ou, d + ' ' + String(hh).padStart(2, '0') + ':' + (m ? m[3] : '00'), o.league || '', o.ov, o.ln]);
     });
     return out;
   }

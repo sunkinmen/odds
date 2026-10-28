@@ -99,7 +99,7 @@
     }
     h += '<h4 style="margin-top:10px">挑選投注選項(點選加入「我的選注」)</h4>';
     h += pb.all.map(c => {
-      const on = m.pick === c.key, lab = c.market === '小分' ? '小分(總進球≤2)' : `${c.side}(${c.side === '主' ? m.home : c.side === '客' ? m.away : '和局'})`;
+      const on = m.pick === c.key, lab = c.key === 'U' ? '小分(總進球≤2)' : c.key === 'O' ? '大分(總進球≥3)' : c.key === 'O35' ? '大3.5(總進球≥4)' : c.key === 'O45' ? '大4.5(總進球≥5)' : `${c.side}(${c.side === '主' ? m.home : c.side === '客' ? m.away : '和局'})`;
       return `<div class="opt ${on ? 'on' : ''} ${c.ev >= 0 ? 'pos' : ''}" data-k="${c.key}"><span><b>${lab}</b> @${c.odds}</span><span>機率 ${pct(c.p)} ・ <b class="ev">期望 ${(c.ev * 100).toFixed(0)}%</b></span><small>市場隱含 ${pct(c.pm)}${c.hist ? ` ・ 同區間歷史平均報酬 ${(c.hist.roi * 100).toFixed(0)}%` : ''}${on ? ' ・ 已加入' : ''}</small></div>`;
     }).join('');
     return h + '<div class="hint">期望值＝機率×賠率−1。回測顯示此估計沒有勝過市場,多數選項為負值,請當作歷史傾向而非保證。</div></div>';
@@ -117,23 +117,24 @@
       const unk = [an.resolved.home, an.resolved.away].some(x => x.id < 0);
       if (b) {
         cls = 'pick';
-        verdict = `<span class="tag">建議 ${b.market === '小分' ? '小分' : b.side} @${b.odds}</span><span class="meter" title="機率 vs 市場"><i style="width:${b.p * 100}%"></i><b style="left:${b.pm * 100}%"></b></span><span>${pct(b.p)}</span>`;
+        verdict = `<span class="tag">建議 ${(b.key === 'U' ? '小分' : b.key === 'O' ? '大分' : b.side)} @${b.odds}</span><span class="meter" title="機率 vs 市場"><i style="width:${b.p * 100}%"></i><b style="left:${b.pm * 100}%"></b></span><span>${pct(b.p)}</span>`;
         verdict += `<span class="tag plain">期望 ${(b.ev * 100).toFixed(0)}%</span>`; if (b.hist) verdict += `<span class="tag plain" title="歷史上同市場同賠率區間每注平均報酬">同區間歷史 ${(b.hist.roi * 100).toFixed(0)}%</span>`;
         if (minLegOf(m) > 1) verdict += `<span class="tag plain">${minLegOf(m)}串起</span>`;
       } else { cls = 'skip'; verdict = `<span class="tag skip">不推薦・沒有賠率≥${cfg.minOdds}且機率≥${pct(cfg.minProb)}的選項</span>`; }
+      (an.tail || []).filter(t => t.flag).forEach(t => { verdict += `<span class="tag flag" title="比分分布與大小盤估算">高比分 大${t.line} 偏高 ${pct(t.p)}(市場${pct(t.pm)}) @${t.odds}</span>`; });
       if (an.anomaly.flag) { if (!b) cls = 'flag'; verdict += `<span class="tag flag">罕見組合 ${an.anomaly.n}場 ${pct(Math.max(...an.anomaly.c) / an.anomaly.n)}同向(${an.toHDA(an.anomaly.pick)})</span>`; }
       if (unk) verdict += '<span class="tag plain">部分隊名查無歷史</span>';
-      det = `<div class="det"><div class="lg" style="margin-top:8px">強隊:${esc(an.strongName)} ・ 合併機率 勝${pct(an.p[0])} 和${pct(an.p[1])} 負${pct(an.p[2])}${an.pu ? ` ・ 小分${pct(an.pu.p)}` : ''}</div>${layerBlock(an)}${scoreBlock(an, m, pb)}${ruleBlock(m, an, pb)}
+      det = `<div class="det"><div class="lg" style="margin-top:8px">強隊:${esc(an.strongName)} ・ 合併機率 勝${pct(an.p[0])} 和${pct(an.p[1])} 負${pct(an.p[2])}${an.pu ? ` ・ 小分${pct(an.pu.p)}${m.ov ? `・大分${pct(1 - an.pu.p)}` : ''}` : ''}</div>${layerBlock(an)}${scoreBlock(an, m, pb)}${ruleBlock(m, an, pb)}
         <div class="lg2"><span><s style="background:var(--sage)"></s>強隊勝</span><span><s style="background:var(--sand)"></s>和</span><span><s style="background:var(--clay)"></s>強隊負</span></div>
         <div class="hint">罕見組合檢查:相同賠率(±3%)共 ${an.anomaly.n} 場${an.anomaly.n ? `,涉及這兩隊 ${pct(an.anomaly.teamShare)}` : ''}。回測中此訊號沒有優於選熱門。</div>
-        <div class="row" style="margin:8px 0 2px"><span class="hint" style="margin:0">小分賠率</span><input class="ou-in" inputmode="decimal" style="width:80px;padding:6px 10px" value="${m.ou || ''}" placeholder="選填"><span class="hint" style="margin:0 0 0 6px">最低串數</span><select class="ml" style="width:auto;padding:6px 10px">${[0, 2, 3, 4, 5].map(v => `<option value="${v}" ${(m.minLeg || 0) === v ? 'selected' : ''}>${v ? v + ' 串起' : '依規則'}</option>`).join('')}</select><span class="grow"></span><button class="btn line sm del">刪除</button></div></div>`;
+        <div class="row" style="margin:8px 0 2px"><span class="hint" style="margin:0 0 0 6px">最低串數</span><select class="ml" style="width:auto;padding:6px 10px">${[0, 2, 3, 4, 5].map(v => `<option value="${v}" ${(m.minLeg || 0) === v ? 'selected' : ''}>${v ? v + ' 串起' : '依規則'}</option>`).join('')}</select><span class="grow"></span><button class="btn line sm del">刪除</button></div></div>`;
     }
-    const pk = hit && hit.market === '勝平負' ? hit.side : null, pu = hit && hit.market === '小分';
+    const pk = hit && hit.market === '勝平負' ? hit.side : null, pu = hit && hit.key === 'U', po = hit && hit.key === 'O';
     const ex = (a && a.an.resolved.league) || '';
     return `<article class="match ${cls}" data-id="${esc(m.id)}">
       <div class="mt"><b>${esc(m.time || '--:--')}</b><span>${esc(SHORT(m.league || ex))}</span></div>
       <div><div class="teams">${esc(m.away)}<span class="at">@</span>${esc(m.home)}</div>
-        <div class="odds"><div class="o ${pk === '客' ? 'hit' : ''}"><i>客</i>${m.oa}</div><div class="o ${pk === '和' ? 'hit' : ''}"><i>和</i>${m.od}</div><div class="o ${pk === '主' ? 'hit' : ''}"><i>主</i>${m.oh}</div>${m.ou ? `<div class="o u ${pu ? 'hit' : ''}"><i>小</i>${m.ou}</div>` : '<div></div>'}</div>
+        <div class="odds"><div class="o ${pk === '客' ? 'hit' : ''}"><i>客</i>${m.oa}</div><div class="o ${pk === '和' ? 'hit' : ''}"><i>和</i>${m.od}</div><div class="o ${pk === '主' ? 'hit' : ''}"><i>主</i>${m.oh}</div>${m.ou ? `<div class="o u ${pu ? 'hit' : ''}"><i>小</i>${m.ou}</div>` : '<div></div>'}${m.ov ? `<div class="o u ${po ? 'hit' : ''}"><i>大</i>${m.ov}</div>` : '<div></div>'}</div>
         <div class="verdict">${verdict}</div></div>${det}</article>`;
   }
   const EMPTY = '<div class="empty"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M3.5 9.5h17"/></svg><div>這天還沒有賽事</div><div class="hint">用上方「貼上匯入 / 連線抓取 / 手動新增」加入運彩賽事</div></div>';
@@ -155,6 +156,7 @@
     c.classList.toggle('open');
   });
   $('list').addEventListener('change', e => {
+    if (e.target.classList.contains('ov-in')) { const m = matches.find(x => x.id === e.target.closest('.match').dataset.id); m.ov = +e.target.value > 1 ? +e.target.value : 0; store.set('oh_matches', matches); render(); return; }
     if (e.target.classList.contains('ou-in')) { const m = matches.find(x => x.id === e.target.closest('.match').dataset.id); m.ou = +e.target.value > 1 ? +e.target.value : 0; store.set('oh_matches', matches); render(); return; }
     if (!e.target.classList.contains('ml')) return;
     const id = e.target.closest('.match').dataset.id, m = matches.find(x => x.id === id); m.minLeg = +e.target.value; store.set('oh_matches', matches); render();
@@ -171,7 +173,7 @@
     const legs = [], inScope = scoped();
     inScope.forEach(m => {
       const a = analyses.get(m.id); if (!a || !a.pb.best) return; const b = a.pb.best;
-      legs.push({ id: m.id, label: `${m.away} @ ${m.home}`, pick: b.market === '小分' ? '小分' : b.side, tm: `${md(m.date)} ${m.time || ''}`, odds: b.odds, p: b.p, minLeg: minLegOf(m) });
+      legs.push({ id: m.id, label: `${m.away} @ ${m.home}`, pick: (b.key === 'U' ? '小分' : b.key === 'O' ? '大分' : b.side), tm: `${md(m.date)} ${m.time || ''}`, odds: b.odds, p: b.p, minLeg: minLegOf(m) });
     });
     const r = OHP.recommend(legs, { ...cfg, sortBy });
     $('pInfo').textContent = `${inScope.length} 場 → 合格 ${r.pool.length} 場`;
@@ -187,7 +189,7 @@
     const out = [];
     scoped().sort(byTime).forEach(m => {
       if (!m.pick) return; const a = analyses.get(m.id); if (!a) return; const c = a.pb.all.find(x => x.key === m.pick); if (!c) return;
-      out.push({ id: m.id, m, label: `${m.away} @ ${m.home}`, pick: c.market === '小分' ? '小分' : c.side, odds: c.odds, p: c.p, minLeg: minLegOf(m), inc: m.inc !== false });
+      out.push({ id: m.id, m, label: `${m.away} @ ${m.home}`, pick: (c.key === 'U' ? '小分' : c.key === 'O' ? '大分' : c.side), odds: c.odds, p: c.p, minLeg: minLegOf(m), inc: m.inc !== false });
     });
     return out;
   }
@@ -236,7 +238,7 @@
       stamp(m); if (m.date < t) { drop++; return; }
       if (!m.id) m.id = 'X' + Math.random().toString(36).slice(2, 7);
       const i = matches.findIndex(x => x.date === m.date && ((x.id === m.id && x.home === m.home) || (x.home === m.home && x.away === m.away)));
-      if (i >= 0) { m.minLeg = m.minLeg || matches[i].minLeg; if (!m.ou && matches[i].ou) m.ou = matches[i].ou; if (matches[i].pick) { m.pick = matches[i].pick; m.inc = matches[i].inc; } matches[i] = m; } else { matches.push(m); added++; }
+      if (i >= 0) { m.minLeg = m.minLeg || matches[i].minLeg; if (!m.ou && matches[i].ou) m.ou = matches[i].ou; if (!m.ov && matches[i].ov) m.ov = matches[i].ov; if (matches[i].pick) { m.pick = matches[i].pick; m.inc = matches[i].inc; } matches[i] = m; } else { matches.push(m); added++; }
     });
     store.set('oh_matches', matches); render();
     $('impMsg').textContent = `匯入 ${arr.length - drop} 場(新增 ${added})${drop ? `,略過已過期 ${drop} 場` : ''}`;
@@ -347,7 +349,7 @@
   $('bmCopy').onclick = () => navigator.clipboard.writeText(bmSrc).then(() => alert('已複製'), () => alert('請長按選取文字複製'));
 
   // ---------- AI 顧問 ----------
-  let gem = Object.assign({ key: '', model: 'gemini-2.5-flash', search: false }, store.get('oh_gem', {}));
+  let gem = Object.assign({ key: '', model: '', search: false, models: [] }, store.get('oh_gem', {}));
   let budget = store.get('oh_budget', 1000), curPlan = null, curItems = [];
   let LOG = store.get('oh_log', []), PLANS = store.get('oh_plans', []), SCORES = store.get('oh_scores', {});
   const saveLog = () => { store.set('oh_log', LOG); store.set('oh_plans', PLANS); store.set('oh_scores', SCORES); };
@@ -393,7 +395,7 @@
   }
   $('aiRule').onclick = () => { if (!prepare()) return; setPlan(OHA.rulePlan(curItems, aiOpts())); };
   $('aiGem').onclick = async () => {
-    if (!gem.key) { $('aiOut').innerHTML = '<div class="hint">尚未設定 Gemini 金鑰。到「設定 → Gemini」貼上你的免費金鑰;或先用規則方案。</div>'; return; }
+    if (!gem.key || !gem.model) { $('aiOut').innerHTML = '<div class="hint">尚未設定 Gemini。到「設定 → Gemini」貼上免費金鑰,按「載入模型清單」並儲存;或先用規則方案。</div>'; return; }
     if (!prepare()) return;
     const btn = $('aiGem'); btn.disabled = true; $('aiOut').innerHTML = `<div class="hint">Gemini 分析中${gem.search ? '(含搜尋,約 20~60 秒)' : ''}…</div>`;
     try {
@@ -401,7 +403,7 @@
       const prompt = OHA.buildPrompt(rank, { budget, minOdds: cfg.minOdds, search: gem.search, SYSnames: SYSNAMES(), maxItems: 25 });
       const plan = await OHA.callGemini(gem.key, gem.model, prompt, gem.search);
       plan.src = 'ai'; setPlan(plan);
-    } catch (e) { $('aiOut').innerHTML = `<div class="hint">Gemini 失敗:${esc(e.message)}。可能是金鑰錯誤或免費額度用完(稍後再試),也可先用規則方案。</div>`; }
+    } catch (e) { $('aiOut').innerHTML = `<div class="hint">Gemini 失敗:${esc(e.message)}。${OHA.isModelGone(e.message) ? '模型可能已不可用:到「設定 → Gemini」按「載入模型清單」重新選擇,再儲存。' : '可能是金鑰錯誤或免費額度用完(稍後再試),也可先用規則方案。'}</div>`; }
     btn.disabled = false;
   };
   $('aiOut').addEventListener('click', e => {
@@ -447,14 +449,36 @@
   }
   $('aiScope').onclick = e => { const b = e.target.closest('.chp'); if (!b) return; scope = b.dataset.v; store.set('oh_scope', scope); renderAIScope(); renderScope(); renderMine(); renderParlay(); curPlan = null; renderPlan(); };
   $('aiBudget').value = budget; $('aiBudget').onchange = e => { budget = Math.max(10, Math.floor(+e.target.value / 10) * 10 || 1000); e.target.value = budget; store.set('oh_budget', budget); };
-  $('sGKey').value = gem.key; $('sGModel').value = gem.model; $('sGSearch').checked = gem.search;
-  $('sGSave').onclick = () => { gem = { key: $('sGKey').value.trim(), model: $('sGModel').value.trim() || 'gemini-2.5-flash', search: $('sGSearch').checked }; store.set('oh_gem', gem); alert('已儲存'); };
-  $('sGClear').onclick = () => { gem.key = ''; $('sGKey').value = ''; store.set('oh_gem', gem); };
+  const gMsg = (t, bad) => { const el = $('sGMsg'); el.textContent = t; el.style.color = bad ? 'var(--clay)' : 'var(--mute)'; };
+  function fillModels() {
+    const L = gem.models.slice(); if (gem.model && !L.find(m => m.id === gem.model)) L.unshift({ id: gem.model, name: gem.model });
+    $('sGModelSel').innerHTML = L.length ? L.map(m => `<option value="${esc(m.id)}" ${m.id === gem.model ? 'selected' : ''}>${esc(m.id)}</option>`).join('') : '<option value="">(尚未載入,請按「載入模型清單」)</option>';
+  }
+  const gSave = () => { gem.key = $('sGKey').value.trim(); gem.model = $('sGModelSel').value || gem.model; gem.search = $('sGSearch').checked; store.set('oh_gem', gem); };
+  $('sGKey').value = gem.key; $('sGSearch').checked = gem.search; fillModels();
+  $('sGModelSel').onchange = () => { gem.model = $('sGModelSel').value; store.set('oh_gem', gem); };
+  $('sGList').onclick = async () => {
+    const key = $('sGKey').value.trim(); if (!key) { gMsg('請先貼上金鑰', true); return; }
+    gMsg('向 Google 查詢這把金鑰可用的模型…');
+    try {
+      const L = await OHA.listModels(key); if (!L.length) { gMsg('這把金鑰沒有可用的 Gemini 文字模型,請確認金鑰是否有效。', true); return; }
+      gem.models = L; if (!L.find(m => m.id === gem.model)) gem.model = OHA.pickDefault(L); gem.key = key; store.set('oh_gem', gem); fillModels();
+      gMsg(`找到 ${L.length} 個可用模型,已選用 ${gem.model}。可從清單換別的,再按「測試連線」確認。`);
+    } catch (e) { gMsg('載入失敗:' + e.message, true); }
+  };
+  $('sGTest').onclick = async () => {
+    const key = $('sGKey').value.trim(), model = $('sGModelSel').value; if (!key) { gMsg('請先貼上金鑰', true); return; } if (!model) { gMsg('請先按「載入模型清單」選一個模型', true); return; }
+    gMsg('測試中…');
+    try { const r = await OHA.testModel(key, model); gMsg(`連線正常:${model} 在 ${r.ms} 毫秒內回應「${r.text || '(空白)'}」。按「儲存」套用。`); }
+    catch (e) { gMsg('連線失敗:' + e.message + (OHA.isModelGone(e.message) ? ' → 此模型可能已不可用,請按「載入模型清單」重新選擇。' : ''), true); }
+  };
+  $('sGSave').onclick = () => { gSave(); gMsg('已儲存(' + (gem.model || '尚未選模型') + ')'); };
+  $('sGClear').onclick = () => { gem.key = ''; $('sGKey').value = ''; store.set('oh_gem', gem); gMsg('已清除金鑰'); };
   renderAIScope(); renderLog();
 
   // ---------- 玩運彩 ----------
   const gtOf = s => s.replace(/-/g, '');
-  const rowsToMatches = rows => OHI.fromExtension(rows.map(r => ({ matchId: r[0], awayTeam: r[1], oddsAway: r[2], homeTeam: r[3], oddsHome: r[4], oddsDraw: r[5], oddsUnder: r[6], matchDate: r[7], league: r[8] })));
+  const rowsToMatches = rows => OHI.fromExtension(rows.map(r => ({ matchId: r[0], awayTeam: r[1], oddsAway: r[2], homeTeam: r[3], oddsHome: r[4], oddsDraw: r[5], oddsUnder: r[6], matchDate: r[7], league: r[8], oddsOver: r[9], lines: r[10] })));
   function bmPS() {
     var PWA = '__PWA__', P = '__PARSE__';
     (async function () {
@@ -498,7 +522,7 @@
     const m = location.hash.match(/^#oh=(.+)$/); if (!m) return;
     try {
       const j = decodeURIComponent(escape(atob(m[1].replace(/-/g, '+').replace(/_/g, '/'))));
-      const arr = JSON.parse(j).map(r => ({ matchId: r[0], awayTeam: r[1], oddsAway: r[2], homeTeam: r[3], oddsHome: r[4], oddsDraw: r[5], oddsUnder: r[6], matchDate: r[7], league: r[8] }));
+      const arr = JSON.parse(j).map(r => ({ matchId: r[0], awayTeam: r[1], oddsAway: r[2], homeTeam: r[3], oddsHome: r[4], oddsDraw: r[5], oddsUnder: r[6], matchDate: r[7], league: r[8], oddsOver: r[9], lines: r[10] }));
       activeDay = 0; store.set('oh_day', 0);
       addMatches(OHI.fromExtension(arr));
     } catch (e) { $('impMsg').textContent = '自動匯入失敗:' + e.message; }

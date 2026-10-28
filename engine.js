@@ -175,7 +175,7 @@
     // 小分
     let pu = null;
     if (m.ou > 0) {
-      const base = interp(1 / m.ou, U_CAL); let a = base * K, w = K;
+      const base = m.ov > 0 ? (1 / m.ou) / (1 / m.ou + 1 / m.ov) : interp(1 / m.ou, U_CAL); let a = base * K, w = K;
       ['L1', 'L2', 'L3', 'L4'].forEach(k => { if (L[k].nU) { const ww = Wt[k] * Math.min(L[k].nU, 60) / L[k].nU; a += ww * L[k].under; w += ww * L[k].nU; } });
       pu = { market: base, p: a / w };
     }
@@ -188,8 +188,16 @@
     const sl = Object.keys(sc).map(key => { const [a, b] = key.split('-').map(Number); return { key, s: a, w: b, p: sc[key] / swt, cnt: cnt[key], res: a > b ? 0 : a === b ? 1 : 2, under: a + b <= 2 }; }).sort((x, y) => y.p - x.p);
     const scoreSum = { top: sl.slice(0, 3), n: nSum, uniq: sl.length,
       pRes: [0, 1, 2].map(j => sl.filter(x => x.res === j).reduce((t, x) => t + x.p, 0)), pUnder: sl.filter(x => x.under).reduce((t, x) => t + x.p, 0) };
+    // 高比分尾端(大3.5 / 大4.5):用比分分布與大小盤去水位機率混合,只在「可能性相對市場升高」時標記
+    const tail = [];
+    [3.5, 4.5].forEach(Ln => {
+      const pr = m.lines && m.lines[Ln]; if (!pr || !(pr[0] > 1 && pr[1] > 1)) return;
+      const pmT = (1 / pr[0]) / (1 / pr[0] + 1 / pr[1]), frac = swt ? sl.filter(x => x.s + x.w >= Ln + 0.5).reduce((t, x) => t + x.p, 0) : pmT, ew = Math.min(swt || 0, 150);
+      const pT = (pmT * 150 + frac * ew) / (150 + ew);
+      tail.push({ line: Ln, key: Ln === 3.5 ? 'O35' : 'O45', odds: pr[0], p: pT, pm: pmT, frac, ev: pT * pr[0] - 1, flag: swt > 0 && pT - pmT >= (Ln === 3.5 ? 0.025 : 0.03) && frac >= pmT * (Ln === 3.5 ? 1.15 : 1.3) });
+    });
     return {
-      scoreSum, resolved: { home: H, away: A, leagueId, league: leagueId >= 0 ? db.leagues[leagueId] : null },
+      tail, scoreSum, resolved: { home: H, away: A, leagueId, league: leagueId >= 0 ? db.leagues[leagueId] : null },
       strongHome, strongName: strongHome ? m.home : m.away, weakName: strongHome ? m.away : m.home,
       layers: L, anomaly, pm, p, pu, qS,
       oddsBySide: strongHome ? { 0: m.oh, 1: m.od, 2: m.oa } : { 0: m.oa, 1: m.od, 2: m.oh },
@@ -206,6 +214,8 @@
       cand.push({ market: '勝平負', side, key: KEY[side], idx: j, odds: o, p: an.p[j], pm: an.pm[j], ev: an.p[j] * o - 1 });
     }
     if (an.pu) cand.push({ market: '小分', side: '小', key: 'U', idx: 'U', odds: m.ou, p: an.pu.p, pm: an.pu.market, ev: an.pu.p * m.ou - 1 });
+    if (an.pu && m.ov > 1) cand.push({ market: '大分', side: '大', key: 'O', idx: 'O', odds: m.ov, p: 1 - an.pu.p, pm: 1 - an.pu.market, ev: (1 - an.pu.p) * m.ov - 1 });
+    (an.tail || []).filter(t => t.flag).forEach(t => cand.push({ market: '大分', side: '大' + t.line, key: t.key, idx: t.key, odds: t.odds, p: t.p, pm: t.pm, ev: t.ev }));
     cand.forEach(c => { c.hist = db ? histRoi(db, c.key, c.odds) : null; });
     cand.sort((a, b) => b.ev - a.ev);
     const ok = cand.filter(c => c.odds >= (minOdds || 1.3) && c.p >= (minProb || 0));

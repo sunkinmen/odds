@@ -1,7 +1,7 @@
 /* 投注顧問:規則式解讀 + 方案(免金鑰)、Gemini 方案(自備免費金鑰)、紀錄結算。瀏覽器 / Node 共用。
  * 原則:AI 只能從模型算出的候選裡挑;賠率、機率一律用本機計算值;預算由使用者設定且不可超過。 */
 (function (root) {
-  const LAB = { H: '主勝', D: '和局', A: '客勝', U: '小分(總進球≤2)' };
+  const LAB = { H: '主勝', D: '和局', A: '客勝', U: '小分(總進球≤2)', O: '大分(總進球≥3)', O35: '大3.5(總進球≥4)', O45: '大4.5(總進球≥5)' };
   const P0 = x => Math.round(x * 100) + '%';
   const r10 = x => Math.max(0, Math.floor(x / 10) * 10);
 
@@ -116,14 +116,14 @@
       `重要背景:回測顯示模型在樣本外沒有勝過市場,多數選項期望值為負;你的工作是在這個前提下做相對較佳、風險受控的選擇,並誠實指出風險,不可宣稱穩賺。\n` +
       `限制:每日預算 ${o.budget} 元(含單場與串關總額,不得超過,金額為 10 的倍數);只能從下列賽事與選項(用 id 與 k 指定)挑;賠率需 ≥ ${o.minOdds};有「最低串數」的賽事只能放進場數 ≥ 該值的串關;串關型態從 ${JSON.stringify(types)} 中選(鍵=串關場數,值=可用型態)。\n` +
       (o.search ? `請先用搜尋查各場的傷兵、停賽、陣容輪換與近期狀況,把有影響的重點寫在 news(以 id 為鍵,一句話),找不到就不要寫。\n` : '') +
-      `只輸出 JSON,格式:{"summary":"一兩句總結","singles":[{"id":"","k":"H|D|A|U","stake":數字,"reason":"一句話理由"}],"parlay":{"type":"如 4串5","legs":[{"id":"","k":""}],"stakePer":每注金額,"reason":""}或null,"skips":[{"id":"","reason":""}],"risks":["風險1","風險2"],"news":{"id":"重點"}}\n` +
+      `只輸出 JSON,格式:{"summary":"一兩句總結","singles":[{"id":"","k":"H|D|A|U|O|O35|O45","stake":數字,"reason":"一句話理由"}],"parlay":{"type":"如 4串5","legs":[{"id":"","k":""}],"stakePer":每注金額,"reason":""}或null,"skips":[{"id":"","reason":""}],"risks":["風險1","風險2"],"news":{"id":"重點"}}\n` +
       `若沒有值得投注的場次,singles 與 parlay 留空並在 summary 說明建議不投注。\n賽事資料:\n` + JSON.stringify(rows);
   }
   async function callGemini(key, model, prompt, search, fetchImpl) {
     const f = fetchImpl || fetch;
     const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3 } };
     if (search) body.tools = [{ google_search: {} }]; else body.generationConfig.responseMimeType = 'application/json';
-    const r = await f(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model || 'gemini-2.5-flash')}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body) });
+    const r = await f(`${GBASE}/models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error((j.error && j.error.message) || ('HTTP ' + r.status));
     const txt = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || '').join('');
@@ -136,7 +136,7 @@
   }
 
   /* ---- 紀錄結算 ---- */
-  function judge(key, ga, gh) { return key === 'H' ? gh > ga : key === 'A' ? ga > gh : key === 'D' ? ga === gh : ga + gh <= 2; }
+  function judge(key, ga, gh) { return key === 'H' ? gh > ga : key === 'A' ? ga > gh : key === 'D' ? ga === gh : key === 'O' ? ga + gh >= 3 : key === 'O35' ? ga + gh >= 4 : key === 'O45' ? ga + gh >= 5 : ga + gh <= 2; }
   function parseScore(s) { const m = String(s || '').match(/^\s*(\d{1,2})\s*[-:：]\s*(\d{1,2})\s*$/); return m ? [+m[1], +m[2]] : null; }   // 客-主
   function stats(log) {
     const done = log.filter(x => x.hit != null);
@@ -145,6 +145,30 @@
     o.hitRate = o.done ? o.hits / o.done : 0; o.roi = o.done ? o.ret / o.stake - 1 : 0; o.expHit = o.done ? o.expP / o.done : 0; o.expRoi = o.done ? o.expEv / o.done : 0;
     return o;
   }
-  const api = { makeItem, explain, rulePlan, validatePlan, buildPrompt, callGemini, parseJson, judge, parseScore, stats, LAB };
+  /* ---- Gemini 模型清單 / 連線測試 ---- */
+  const GBASE = 'https://generativelanguage.googleapis.com/v1beta';
+  async function listModels(key, fetchImpl) {
+    const f = fetchImpl || fetch; let out = [], tok = '';
+    for (let n = 0; n < 5; n++) {
+      const r = await f(`${GBASE}/models?pageSize=200${tok ? '&pageToken=' + encodeURIComponent(tok) : ''}`, { headers: { 'x-goog-api-key': key } });
+      const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error((j.error && j.error.message) || ('HTTP ' + r.status));
+      out = out.concat(j.models || []); tok = j.nextPageToken || ''; if (!tok) break;
+    }
+    const ok = out.filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && /^models\/gemini/.test(m.name) && !/embed|tts|image|live|audio|robotics|computer-use|aqa|learnlm/i.test(m.name))
+      .map(m => ({ id: m.name.replace(/^models\//, ''), name: m.displayName || m.name, desc: m.description || '' }));
+    const ver = s => { const m = s.match(/gemini-(\d+(?:\.\d+)?)/); return m ? +m[1] : 0; };
+    const score = s => ver(s.id) * 10 + (/flash/.test(s.id) ? 3 : 0) - (/lite/.test(s.id) ? 1 : 0) - (/preview|exp|latest|\d{3}$/.test(s.id) ? 2 : 0);
+    ok.sort((x, y) => score(y) - score(x));
+    return ok;
+  }
+  function pickDefault(models) { const m = models.find(x => /flash/.test(x.id) && !/lite|preview|exp/.test(x.id)) || models.find(x => /flash/.test(x.id)) || models[0]; return m ? m.id : ''; }
+  async function testModel(key, model, fetchImpl) {
+    const f = fetchImpl || fetch, t0 = Date.now();
+    const r = await f(`${GBASE}/models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: '只回覆 OK' }] }], generationConfig: { maxOutputTokens: 16, temperature: 0 } }) });
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error((j.error && j.error.message) || ('HTTP ' + r.status));
+    return { ms: Date.now() - t0, text: ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || '').join('').trim() };
+  }
+  const isModelGone = msg => /not found|no longer available|not supported for generateContent|is not supported|deprecated|404/i.test(String(msg || ''));
+  const api = { listModels, pickDefault, testModel, isModelGone, makeItem, explain, rulePlan, validatePlan, buildPrompt, callGemini, parseJson, judge, parseScore, stats, LAB };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OHA = api;
 })(typeof self !== 'undefined' ? self : this);
