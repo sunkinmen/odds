@@ -24,7 +24,9 @@
     const c = it.best, reasons = [], warns = [];
     if (!c) return { grade: 'C', reasons: ['沒有同時滿足最低賠率與最低機率的選項'], warns: [] };
     const idx = c.k === 'H' ? (it.strongHome ? 0 : 2) : c.k === 'A' ? (it.strongHome ? 2 : 0) : c.k === 'D' ? 1 : null;
-    reasons.push(`評等是相對評等:看模型比市場多出多少優勢與幾層同向,不代表會賺。模型機率 ${P0(c.p)},市場隱含 ${P0(c.pm)}(${c.p >= c.pm ? '+' : ''}${((c.p - c.pm) * 100).toFixed(1)} 點),期望值 ${(c.ev * 100).toFixed(0)}%`);
+    { const L1 = it.layers.L1, n1 = L1 ? L1.n : 0, d = c.p - c.pm, se = n1 >= 5 ? 1.96 * Math.sqrt(c.p * (1 - c.p) / n1) : 0.1;
+      reasons.push(`賠率 ${c.odds} 要命中 ${P0(1 / c.odds)} 才打平,模型估 ${P0(c.p)}(每投100元平均拿回 ${(100 * (1 + c.ev)).toFixed(0)} 元)`);
+      reasons.push(`市場扣水後認為 ${P0(c.pm)},模型${Math.abs(d) < se ? `只差 ${(d * 100).toFixed(1)} 點,小於樣本誤差 ±${(se * 100).toFixed(0)} 點,等同持平` : `${d >= 0 ? '高' : '低'}於市場 ${Math.abs(d * 100).toFixed(1)} 點`};評等只看相對優勢與層間一致性,不代表會賺`); }
     let agree = 0, tot = 0;
     if (idx != null) ['L1', 'L2', 'L3', 'L4'].forEach(k => { const L = it.layers[k]; if (L.n >= 5) { tot++; if (L.c.indexOf(Math.max(...L.c)) === idx) agree++; } });
     if (idx != null && tot) reasons.push(`${tot} 層有足夠樣本,其中 ${agree} 層最常見結果與此選項一致`);
@@ -106,28 +108,53 @@
 
   /* ---- Gemini ---- */
   function buildPrompt(items, o) {
-    const rows = items.slice(0, o.maxItems || 25).map(i => ({
-      id: i.id, 賽事: i.label, 聯賽: i.league, 時間: (i.date || '').slice(5) + ' ' + i.time, 最低串數: i.minLeg > 1 ? i.minLeg : undefined,
-      選項: i.cands.map(c => ({ k: c.k, 名稱: c.label, 賠率: c.odds, 模型機率: +c.p.toFixed(3), 市場機率: +c.pm.toFixed(3), 期望值: +c.ev.toFixed(3), 同區間歷史報酬: c.hist == null ? undefined : +c.hist.toFixed(3) })),
-      前三比分: i.tops.map(t => `${t.score} ${P0(t.pct)}`), 比分母數: i.nScore, 規則評等: i.grade, 規則提醒: i.warns.length ? i.warns : undefined
-    }));
+    const r2 = x => +x.toFixed(2);
+    const rows = items.slice(0, o.maxItems || 12).map(i => {
+      const cs = i.cands.slice().sort((a, b) => b.ev - a.ev).slice(0, o.maxCands || 3);
+      return {
+        id: i.id, 賽事: i.label, 時間: i.time, 最低串數: i.minLeg > 1 ? i.minLeg : undefined,
+        選項: cs.map(c => [c.k, c.odds, r2(c.p), r2(c.pm), r2(c.ev)]),
+        評等: i.grade, 提醒: i.warns.length ? i.warns.slice(0, 2).map(w => w.slice(0, 24)) : undefined
+      };
+    });
     const types = Object.keys(o.SYSnames || {}).length ? o.SYSnames : {};
     return `你是足球投注風險顧問,使用繁體中文。以下是台灣運彩足球賽事,賠率、機率、期望值皆為本機模型算出,不可更改或自行編造。\n` +
       `重要背景:回測顯示模型在樣本外沒有勝過市場,多數選項期望值為負;你的工作是在這個前提下做相對較佳、風險受控的選擇,並誠實指出風險,不可宣稱穩賺。\n` +
       `限制:每日預算 ${o.budget} 元(含單場與串關總額,不得超過,金額為 10 的倍數);只能從下列賽事與選項(用 id 與 k 指定)挑;賠率需 ≥ ${o.minOdds};有「最低串數」的賽事只能放進場數 ≥ 該值的串關;串關型態從 ${JSON.stringify(types)} 中選(鍵=串關場數,值=可用型態)。\n` +
       (o.search ? `請先用搜尋查各場的傷兵、停賽、陣容輪換與近期狀況,把有影響的重點寫在 news(以 id 為鍵,一句話),找不到就不要寫。\n` : '') +
       `只輸出 JSON,格式:{"summary":"一兩句總結","singles":[{"id":"","k":"H|D|A|U|O|O35|O45","stake":數字,"reason":"一句話理由"}],"parlay":{"type":"如 4串5","legs":[{"id":"","k":""}],"stakePer":每注金額,"reason":""}或null,"skips":[{"id":"","reason":""}],"risks":["風險1","風險2"],"news":{"id":"重點"}}\n` +
-      `若沒有值得投注的場次,singles 與 parlay 留空並在 summary 說明建議不投注。\n賽事資料:\n` + JSON.stringify(rows);
+      `若沒有值得投注的場次,singles 與 parlay 留空並在 summary 說明建議不投注。\n賽事資料(選項欄位依序為 [k, 賠率, 模型機率, 市場機率, 期望值],已按期望值排序,只列前幾名;評等 A/B/C 為規則評等;所有說明請簡短,每個 reason 不超過 25 字):\n` + JSON.stringify(rows);
   }
-  async function callGemini(key, model, prompt, search, fetchImpl) {
-    const f = fetchImpl || fetch;
-    const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3 } };
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const GemErr = (msg, code) => Object.assign(new Error(msg), { code });
+  async function callGemini(key, model, prompt, search, fetchImpl, opt) {
+    const f = fetchImpl || fetch, o = opt || {};
+    const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 16384 } };
     if (search) body.tools = [{ google_search: {} }]; else body.generationConfig.responseMimeType = 'application/json';
-    const r = await f(`${GBASE}/models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body) });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error((j.error && j.error.message) || ('HTTP ' + r.status));
-    const txt = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || '').join('');
-    return parseJson(txt);
+    const url = `${GBASE}/models/${encodeURIComponent(model)}:generateContent`, tries = o.tries || 3;
+    let last;
+    for (let k = 0; k < tries; k++) {
+      const ac = typeof AbortController !== 'undefined' ? new AbortController() : null, tm = ac ? setTimeout(() => ac.abort(), o.timeoutMs || 120000) : null;
+      try {
+        const r = await f(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body), signal: ac ? ac.signal : undefined });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          const msg = (j.error && j.error.message) || ('HTTP ' + r.status);
+          if ([429, 500, 502, 503, 504].indexOf(r.status) >= 0 && k < tries - 1) { if (o.onRetry) o.onRetry(k + 1, r.status); last = GemErr(msg, 'busy'); await sleep(r.status === 429 ? 8000 * (k + 1) : 3000 * (k + 1)); continue; }
+          throw GemErr(msg, r.status === 429 ? 'quota' : r.status === 503 ? 'busy' : 'http');
+        }
+        const cand = (j.candidates || [])[0] || {};
+        const txt = ((cand.content || {}).parts || []).map(p => p.text || '').join('');
+        if (!txt) throw GemErr(j.promptFeedback && j.promptFeedback.blockReason ? 'AI 拒絕回應(' + j.promptFeedback.blockReason + ')' : 'AI 回傳空白(' + (cand.finishReason || '未知原因') + ')', 'empty');
+        try { return parseJson(txt); }
+        catch (e) { throw GemErr(cand.finishReason === 'MAX_TOKENS' ? 'AI 回覆太長被截斷' : 'AI 回傳的不是完整 JSON', 'cut'); }
+      } catch (e) {
+        if (e.name === 'AbortError') { last = GemErr('等待超過 ' + Math.round((o.timeoutMs || 120000) / 1000) + ' 秒沒有回應', 'timeout'); if (k < tries - 1) { if (o.onRetry) o.onRetry(k + 1, 'timeout'); continue; } throw last; }
+        if (e.code === 'busy' && k < tries - 1) { last = e; continue; }
+        throw e;
+      } finally { if (tm) clearTimeout(tm); }
+    }
+    throw last || GemErr('Gemini 無回應', 'http');
   }
   function parseJson(t) {
     t = String(t || '').replace(/```json|```/g, '');
