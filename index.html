@@ -149,6 +149,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 .kv{display:grid;grid-template-columns:1fr auto;gap:4px 10px;font-size:13.5px;margin-top:8px}.kv b{text-align:right;font-variant-numeric:tabular-nums}
 .plan{border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin:10px 0;background:var(--paper)}
 .plan h4{margin:0 0 4px;font-size:13.5px}.plan .rs{font-size:12.5px;color:var(--mute);margin-top:2px}
+.cal{display:grid;grid-template-columns:62px 1fr auto;gap:6px;align-items:center;font-size:12px;color:var(--mute);padding:3px 0}.cb{position:relative;height:12px;background:var(--line);border-radius:6px;overflow:hidden}.cb i{position:absolute;left:0;top:0;height:100%}.cb .pr{background:#c9b99a;opacity:.7}.cb .ac{background:var(--sage,#8a9a7b);height:6px;top:3px;border-radius:3px}.mv{font-size:11.5px;color:var(--mute);margin-left:6px}.mv.dn{color:var(--clay)}.mv.up{color:#6b8a63}
 .pl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:13.5px}.pl:last-child{border-bottom:0}
 .pl b{font-variant-numeric:tabular-nums}.pl .rs{grid-column:1/-1}
 .gr{display:inline-block;min-width:20px;text-align:center;border-radius:6px;font-size:11px;font-weight:700;padding:0 5px;margin-right:4px;background:var(--sand-s);color:#8a7646}
@@ -161,7 +162,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 <div class="top">
   <div class="brand">
     <div class="mark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
-    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.18</small></div>
+    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.19</small></div>
   </div>
   <div class="days" id="days"></div>
 </div>
@@ -317,11 +318,12 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
   btns.forEach(function(b){b.addEventListener('click',function(){go(b.getAttribute('data-t'))})});
 })();
 </script>
-<script src="engine.js?v=318"></script>
-<script src="parlay.js?v=318"></script>
-<script src="advisor.js?v=318"></script>
-<script src="importer.js?v=318"></script>
-<script src="dataload.js?v=318"></script>
-<script src="app.js?v=318"></script>
+<script src="engine.js?v=319"></script>
+<script src="parlay.js?v=319"></script>
+<script src="advisor.js?v=319"></script>
+<script src="importer.js?v=319"></script>
+<script src="dataload.js?v=319"></script>
+<script src="track.js?v=319"></script>
+<script src="app.js?v=319"></script>
 </body>
 </html>
