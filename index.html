@@ -144,13 +144,14 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 <div class="top">
   <div class="brand">
     <div class="mark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
-    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.6</small></div>
+    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.7</small></div>
   </div>
   <div class="days" id="days"></div>
 </div>
 
 <main id="tab-matches" class="wrap">
   <div class="row" style="margin-top:2px">
+    <button class="btn sm" id="bSync">更新賽事</button>
     <button class="btn alt sm" id="bPaste">貼上匯入</button>
     <button class="btn alt sm" id="bHelp">抓取教學</button>
     <button class="btn alt sm" id="bAdd">手動新增</button>
@@ -171,13 +172,14 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
     <div class="row" style="margin-top:8px"><input type="time" id="aT" class="grow"><button class="btn" id="aSave">加入</button></div>
   </div>
   <div class="panel" id="helpBox" style="display:none">
-    <b>每天怎麼更新賽事</b>
+    <b>每天怎麼更新賽事(資料來源:玩運彩,免登入)</b>
     <ol style="margin:8px 0 0;padding-left:20px;line-height:1.7;font-size:13.5px">
-      <li>第一次:到「設定」按「複製抓取書籤」,存成 Safari 書籤(之後都不用再做)。</li>
-      <li>登入運彩 → 每日賽事 → 足球,按書籤。若跳出「正在開啟…」,等頁面載入後<b>再按一次</b>。</li>
-      <li>書籤會抓今天+明天,<b>自動回到本 App 並匯入</b>,不用複製貼上。</li>
+      <li>第一次:到「設定」按「複製玩運彩書籤」,存成 Safari 書籤(只做一次)。</li>
+      <li>用 Safari 開玩運彩任一頁(足球預測比例頁最好),按書籤。</li>
+      <li>書籤會抓今天+明天,<b>自動回到本 App 並匯入</b>,含小分賠率。</li>
+      <li>想完全自動(開 App 就更新):部署設定頁的 Worker 轉送,貼上網址後,按「更新賽事」或開啟 App 就會自動抓。</li>
     </ol>
-    <div class="hint">運彩要登入才看得到賽事,我沒辦法替你登入或在背景自動抓,所以至少要按一下書籤。想少按一次:登入後把賽事表那個頁面本身存成書籤再用。</div>
+    <div class="hint">iPhone 的網頁 App 不能在背景偷跑,最自動的程度就是「開 App 時自動更新」。運彩官網原本的書籤仍保留在設定頁,可抓最低串數等玩運彩沒有的資訊。</div>
   </div>
   <div class="hint" id="impMsg" style="white-space:pre-wrap"></div>
   <details class="note"><summary>⚠ 先看回測結論</summary><p>用 2022–2023 預測 2025(6,000 場):相近賠率的歷史結果,並沒有比「直接選熱門」更準,長期 ROI 約 −15%;莊家抽水約 22%。這裡給的是歷史傾向,不是穩贏保證,請控制金額。</p></details>
@@ -217,7 +219,17 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
     <div class="row" style="margin-top:10px"><button class="btn" id="sSave">儲存</button></div>
   </div>
 
-  <div class="sec">抓取書籤</div>
+  <div class="sec">自動更新(玩運彩)</div>
+  <div class="panel">
+    <div class="hint" style="margin-top:0">玩運彩的足球賠率(含運彩盤的客主和與小 2.5)寫在公開網頁裡。瀏覽器不允許 App 直接跨網站讀取,所以有兩種方式:書籤(Safari 就能用),或自己部署一個免費的 Cloudflare Worker 轉送(檔案在 proxy/worker.js)。</div>
+    <pre id="bmPS"></pre>
+    <div class="row" style="margin-top:8px"><button class="btn" id="bmPSCopy">複製玩運彩書籤</button></div>
+    <label class="f">Worker 網址(選填,填了就會在開啟 App 時自動更新)</label>
+    <input id="sProxy" placeholder="https://xxx.workers.dev/">
+    <div class="row" style="margin-top:8px"><button class="btn alt sm" id="sProxySave">儲存網址並更新</button></div>
+  </div>
+
+  <div class="sec">運彩官網書籤(備用)</div>
   <div class="panel">
     <div class="hint" style="margin-top:0">在運彩「每日賽事 → 足球」頁面開這個書籤,會讀取畫面文字、自動切到明天再讀一次,全部複製到剪貼簿。它只讀你眼前的頁面,不會送出任何資料。</div>
     <pre id="bm"></pre>
@@ -251,10 +263,10 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
   btns.forEach(function(b){b.addEventListener('click',function(){go(b.getAttribute('data-t'))})});
 })();
 </script>
-<script src="engine.js?v=36"></script>
-<script src="parlay.js?v=36"></script>
-<script src="importer.js?v=36"></script>
-<script src="dataload.js?v=36"></script>
-<script src="app.js?v=36"></script>
+<script src="engine.js?v=37"></script>
+<script src="parlay.js?v=37"></script>
+<script src="importer.js?v=37"></script>
+<script src="dataload.js?v=37"></script>
+<script src="app.js?v=37"></script>
 </body>
 </html>

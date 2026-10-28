@@ -231,8 +231,8 @@
     arr.forEach(m => {
       stamp(m); if (m.date < t) { drop++; return; }
       if (!m.id) m.id = 'X' + Math.random().toString(36).slice(2, 7);
-      const i = matches.findIndex(x => x.id === m.id && x.home === m.home && x.date === m.date);
-      if (i >= 0) { m.minLeg = m.minLeg || matches[i].minLeg; matches[i] = m; } else { matches.push(m); added++; }
+      const i = matches.findIndex(x => x.date === m.date && ((x.id === m.id && x.home === m.home) || (x.home === m.home && x.away === m.away)));
+      if (i >= 0) { m.minLeg = m.minLeg || matches[i].minLeg; if (!m.ou && matches[i].ou) m.ou = matches[i].ou; if (matches[i].pick) { m.pick = matches[i].pick; m.inc = matches[i].inc; } matches[i] = m; } else { matches.push(m); added++; }
     });
     store.set('oh_matches', matches); render();
     $('impMsg').textContent = `匯入 ${arr.length - drop} 場(新增 ${added})${drop ? `,略過已過期 ${drop} 場` : ''}`;
@@ -253,7 +253,7 @@
   // ---------- 設定 ----------
   function fillCfg() { $('sMinOdds').value = cfg.minOdds; $('sMinProb').value = cfg.minProb; $('sKMin').value = cfg.kMin; $('sKMax').value = cfg.kMax; $('sMinJoint').value = cfg.minJoint; $('sRules').value = cfg.rules; }
   $('sSave').onclick = () => {
-    cfg = { minOdds: +$('sMinOdds').value || 1.3, minProb: +$('sMinProb').value || 0.5, kMin: Math.max(2, +$('sKMin').value || 2), kMax: Math.min(8, +$('sKMax').value || 4), minJoint: +$('sMinJoint').value || 0.12, rules: $('sRules').value };
+    cfg = { ver: 2, minOdds: +$('sMinOdds').value || 1.3, minProb: +$('sMinProb').value || 0.5, kMin: Math.max(2, +$('sKMin').value || 2), kMax: Math.min(8, +$('sKMax').value || 4), minJoint: +$('sMinJoint').value || 0.12, rules: $('sRules').value };
     store.set('oh_cfg', cfg); render(); alert('已儲存');
   };
   fillCfg();
@@ -342,12 +342,53 @@
   $('bm').textContent = bmSrc;
   $('bmCopy').onclick = () => navigator.clipboard.writeText(bmSrc).then(() => alert('已複製'), () => alert('請長按選取文字複製'));
 
+  // ---------- 玩運彩 ----------
+  const gtOf = s => s.replace(/-/g, '');
+  const rowsToMatches = rows => OHI.fromExtension(rows.map(r => ({ matchId: r[0], awayTeam: r[1], oddsAway: r[2], homeTeam: r[3], oddsHome: r[4], oddsDraw: r[5], oddsUnder: r[6], matchDate: r[7], league: r[8] })));
+  function bmPS() {
+    var PWA = '__PWA__', P = '__PARSE__';
+    (async function () {
+      try {
+        const tp = d => d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' }), t0 = new Date(), t1 = new Date(Date.now() + 864e5);
+        if (location.hostname.indexOf('playsport.cc') < 0) { alert('請先在玩運彩網站(playsport.cc)上按這個書籤'); return; }
+        const parse = new Function('return ' + P)(); let rows = [];
+        for (const d of [tp(t0), tp(t1)]) {
+          const g = d.replace(/-/g, ''), h = await (await fetch('/predict/scale?allianceid=4&gametime=' + g + '&sid=0', { credentials: 'omit' })).text();
+          rows = rows.concat(parse(new DOMParser().parseFromString(h, 'text/html'), g));
+        }
+        if (!rows.length) { alert('沒有抓到足球賽事'); return; }
+        const b = btoa(unescape(encodeURIComponent(JSON.stringify(rows)))).replace(/\+/g, '-').replace(/\//g, '_');
+        location.href = PWA + '#oh=' + b;
+      } catch (e) { alert('抓取失敗:' + (e && e.message)); }
+    })();
+  }
+  const bmPSSrc = 'javascript:(' + bmPS.toString().replace('__PWA__', location.origin + location.pathname).replace('__PARSE__', OHI.parsePS.toString().replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, ' ')).replace(/\s*\n\s*/g, ' ') + ')()';
+  $('bmPS').textContent = bmPSSrc;
+  $('bmPSCopy').onclick = () => navigator.clipboard.writeText(bmPSSrc).then(() => alert('已複製'), () => alert('請長按選取文字複製'));
+  let proxy = store.get('oh_proxy', '');
+  $('sProxy').value = proxy;
+  async function sync(auto) {
+    if (!proxy) { if (!auto) { $('impMsg').textContent = '尚未設定 Worker 網址。請用玩運彩書籤,或到設定頁填入 Worker 網址。'; } return; }
+    $('impMsg').textContent = '更新中…';
+    try {
+      let all = [];
+      for (const d of days()) {
+        const r = await fetch(proxy + (proxy.includes('?') ? '&' : '?') + 'd=' + gtOf(d)); if (!r.ok) throw new Error('HTTP ' + r.status);
+        all = all.concat(OHI.fromPlaysport(await r.text(), gtOf(d)));
+      }
+      if (!all.length) { $('impMsg').textContent = '玩運彩沒有足球賽事資料'; return; }
+      addMatches(rowsToMatches(all)); store.set('oh_sync', Date.now());
+    } catch (e) { $('impMsg').textContent = '自動更新失敗:' + e.message; }
+  }
+  $('bSync').onclick = () => sync(false);
+  $('sProxySave').onclick = () => { proxy = $('sProxy').value.trim(); store.set('oh_proxy', proxy); sync(false); };
+
   // ---------- 書籤自動回傳(網址 #oh=...) ----------
   function importHash() {
     const m = location.hash.match(/^#oh=(.+)$/); if (!m) return;
     try {
       const j = decodeURIComponent(escape(atob(m[1].replace(/-/g, '+').replace(/_/g, '/'))));
-      const arr = JSON.parse(j).map(r => ({ matchId: r[0], awayTeam: r[1], oddsAway: r[2], homeTeam: r[3], oddsHome: r[4], oddsDraw: r[5], oddsUnder: r[6], matchDate: r[7] }));
+      const arr = JSON.parse(j).map(r => ({ matchId: r[0], awayTeam: r[1], oddsAway: r[2], homeTeam: r[3], oddsHome: r[4], oddsDraw: r[5], oddsUnder: r[6], matchDate: r[7], league: r[8] }));
       activeDay = 0; store.set('oh_day', 0);
       addMatches(OHI.fromExtension(arr));
     } catch (e) { $('impMsg').textContent = '自動匯入失敗:' + e.message; }
@@ -357,4 +398,5 @@
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });
   render(); importHash();
+  if (proxy && Date.now() - store.get('oh_sync', 0) > 10 * 60 * 1000 && !location.hash) sync(true);
 })();
