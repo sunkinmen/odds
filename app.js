@@ -220,13 +220,6 @@
   $('bm').textContent = bmSrc;
   $('bmCopy').onclick = () => navigator.clipboard.writeText(bmSrc).then(() => alert('已複製'), () => alert('請長按選取文字複製'));
 
-  // ---------- Tab ----------
-  document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
-    document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
-    ['matches', 'parlay', 'set'].forEach(t => $('tab-' + t).style.display = t === b.dataset.t ? 'block' : 'none');
-    $('days').style.display = b.dataset.t === 'matches' ? 'grid' : 'none';
-    window.scrollTo(0, 0);
-  });
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });
   render();
 })();
