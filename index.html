@@ -62,6 +62,15 @@ details.note p{margin:8px 2px 0;line-height:1.6;color:var(--ink)}
 
 /* ---------- 賽事卡 ---------- */
 .match{display:grid;grid-template-columns:76px 1fr;gap:12px;background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:13px 13px 12px 0;margin:10px 0;box-shadow:var(--shadow);position:relative;overflow:hidden}
+
+.match.medal{border:2.5px solid transparent;padding-top:26px;background:linear-gradient(var(--paper),var(--paper)) padding-box,var(--mg) border-box;background-size:auto,300% 300%;animation:mshine 6s linear infinite}
+.match.gold{--mg:linear-gradient(120deg,#8a6a12,#f5d76e,#fff4b8,#d4a017,#8a6a12,#f5d76e);box-shadow:0 0 0 1px rgba(212,160,23,.25),0 4px 16px rgba(212,160,23,.35)}
+.match.silver{--mg:linear-gradient(120deg,#7d838b,#e8ecf0,#ffffff,#b4bac2,#7d838b,#e8ecf0);box-shadow:0 0 0 1px rgba(150,158,168,.3),0 4px 14px rgba(150,158,168,.35)}
+.match.bronze{--mg:linear-gradient(120deg,#6e3b1c,#d58a52,#f3c39a,#b8693a,#6e3b1c,#d58a52);box-shadow:0 0 0 1px rgba(184,105,58,.25),0 4px 14px rgba(184,105,58,.3)}
+.mbadge{position:absolute;left:0;top:0;right:0;height:20px;line-height:20px;text-align:center;font-size:11px;font-weight:700;letter-spacing:.06em;color:#3a2a08;background:var(--mg);background-size:300% 300%;animation:mshine 6s linear infinite;z-index:1}
+.match.silver .mbadge{color:#2b2f34}.match.bronze .mbadge{color:#fff4e8}
+@keyframes mshine{0%{background-position:0 0,0% 50%}100%{background-position:0 0,300% 50%}}
+@media (prefers-reduced-motion:reduce){.match.medal,.mbadge{animation:none}}
 .match::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--rail,var(--line))}
 .match.pick{--rail:var(--sage)}.match.skip{--rail:var(--clay)}.match.flag{--rail:var(--sand)}
 .mt{padding-left:16px;text-align:left}
@@ -132,7 +141,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 .scr small{color:var(--mute);grid-column:2/-1;margin-top:-3px}
 .opt{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center;padding:8px 10px;margin:6px 0;border:1px solid var(--line);border-radius:12px;font-size:13px;cursor:pointer;background:var(--paper)}
 .opt.on{border-color:var(--sage);background:var(--sage-s)}.opt.pos b.ev{color:var(--deep)}.opt b.ev{color:var(--clay)}
-.opt small{color:var(--mute);grid-column:1/-1}
+.opt small{color:var(--mute);grid-column:1/-1}.opt .s2{color:var(--mute);font-size:11px}.opt .tag{font-style:normal;font-size:10px;background:var(--sage-s);color:var(--deep);border-radius:6px;padding:1px 5px}.vbar{grid-column:1/-1;position:relative;height:5px;background:var(--line);border-radius:3px}.vbar .pp{position:absolute;left:0;top:0;bottom:0;background:var(--sage);border-radius:3px;opacity:.7}.vbar .be{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--clay);z-index:1}
 .tbtn{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
 .mleg{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:13px}
 .mleg label{flex:1}.mleg input{width:auto}
@@ -151,7 +160,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 <div class="top">
   <div class="brand">
     <div class="mark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
-    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.13</small></div>
+    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.16</small></div>
   </div>
   <div class="days" id="days"></div>
 </div>
@@ -306,11 +315,11 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
   btns.forEach(function(b){b.addEventListener('click',function(){go(b.getAttribute('data-t'))})});
 })();
 </script>
-<script src="engine.js?v=313"></script>
-<script src="parlay.js?v=313"></script>
-<script src="advisor.js?v=313"></script>
-<script src="importer.js?v=313"></script>
-<script src="dataload.js?v=313"></script>
-<script src="app.js?v=313"></script>
+<script src="engine.js?v=316"></script>
+<script src="parlay.js?v=316"></script>
+<script src="advisor.js?v=316"></script>
+<script src="importer.js?v=316"></script>
+<script src="dataload.js?v=316"></script>
+<script src="app.js?v=316"></script>
 </body>
 </html>
