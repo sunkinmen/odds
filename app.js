@@ -104,6 +104,10 @@
     }).join('');
     return h + '<div class="hint">期望值＝機率×賠率−1。回測顯示此估計沒有勝過市場,多數選項為負值,請當作歷史傾向而非保證。</div></div>';
   }
+  function ruleBlock(m, an, pb) {
+    const it = OHA.makeItem(m, an, pb, { minOdds: cfg.minOdds, minLegOf });
+    return `<div class="sc3"><h4>解讀(規則式)<span class="gr ${it.grade}" style="margin-left:6px">${it.grade}</span></h4>${it.reasons.map(r => `<div class="hint" style="margin:3px 0">・${esc(r)}</div>`).join('')}${it.warns.map(r => `<div class="hint" style="margin:3px 0;color:var(--clay)">⚠ ${esc(r)}</div>`).join('')}</div>`;
+  }
   function card(m) {
     const a = analyses.get(m.id); let cls = '', verdict = '', det = '';
     let hit = null;
@@ -119,7 +123,7 @@
       } else { cls = 'skip'; verdict = `<span class="tag skip">不推薦・沒有賠率≥${cfg.minOdds}且機率≥${pct(cfg.minProb)}的選項</span>`; }
       if (an.anomaly.flag) { if (!b) cls = 'flag'; verdict += `<span class="tag flag">罕見組合 ${an.anomaly.n}場 ${pct(Math.max(...an.anomaly.c) / an.anomaly.n)}同向(${an.toHDA(an.anomaly.pick)})</span>`; }
       if (unk) verdict += '<span class="tag plain">部分隊名查無歷史</span>';
-      det = `<div class="det"><div class="lg" style="margin-top:8px">強隊:${esc(an.strongName)} ・ 合併機率 勝${pct(an.p[0])} 和${pct(an.p[1])} 負${pct(an.p[2])}${an.pu ? ` ・ 小分${pct(an.pu.p)}` : ''}</div>${layerBlock(an)}${scoreBlock(an, m, pb)}
+      det = `<div class="det"><div class="lg" style="margin-top:8px">強隊:${esc(an.strongName)} ・ 合併機率 勝${pct(an.p[0])} 和${pct(an.p[1])} 負${pct(an.p[2])}${an.pu ? ` ・ 小分${pct(an.pu.p)}` : ''}</div>${layerBlock(an)}${scoreBlock(an, m, pb)}${ruleBlock(m, an, pb)}
         <div class="lg2"><span><s style="background:var(--sage)"></s>強隊勝</span><span><s style="background:var(--sand)"></s>和</span><span><s style="background:var(--clay)"></s>強隊負</span></div>
         <div class="hint">罕見組合檢查:相同賠率(±3%)共 ${an.anomaly.n} 場${an.anomaly.n ? `,涉及這兩隊 ${pct(an.anomaly.teamShare)}` : ''}。回測中此訊號沒有優於選熱門。</div>
         <div class="row" style="margin:8px 0 2px"><span class="hint" style="margin:0">小分賠率</span><input class="ou-in" inputmode="decimal" style="width:80px;padding:6px 10px" value="${m.ou || ''}" placeholder="選填"><span class="hint" style="margin:0 0 0 6px">最低串數</span><select class="ml" style="width:auto;padding:6px 10px">${[0, 2, 3, 4, 5].map(v => `<option value="${v}" ${(m.minLeg || 0) === v ? 'selected' : ''}>${v ? v + ' 串起' : '依規則'}</option>`).join('')}</select><span class="grow"></span><button class="btn line sm del">刪除</button></div></div>`;
@@ -341,6 +345,112 @@
   const bmSrc = 'javascript:(' + bm.toString().replace('__PWA__', location.origin + location.pathname).replace(/\s*\n\s*/g, '') + ')()';
   $('bm').textContent = bmSrc;
   $('bmCopy').onclick = () => navigator.clipboard.writeText(bmSrc).then(() => alert('已複製'), () => alert('請長按選取文字複製'));
+
+  // ---------- AI 顧問 ----------
+  let gem = Object.assign({ key: '', model: 'gemini-2.5-flash', search: false }, store.get('oh_gem', {}));
+  let budget = store.get('oh_budget', 1000), curPlan = null, curItems = [];
+  let LOG = store.get('oh_log', []), PLANS = store.get('oh_plans', []), SCORES = store.get('oh_scores', {});
+  const saveLog = () => { store.set('oh_log', LOG); store.set('oh_plans', PLANS); store.set('oh_scores', SCORES); };
+  const SYSNAMES = () => { const o = {}; Object.keys(OHP.SYS).forEach(n => { if (n >= 2 && n <= 6) o[n] = OHP.SYS[n].map(t => t[0]); }); return o; };
+  const aiOpts = () => ({ budget, minOdds: cfg.minOdds, minProb: cfg.minProb, SYS: OHP.SYS, calc: OHP.calcSystem });
+  function buildItems() {
+    if (!db) return [];
+    return scoped().sort(byTime).map(m => { const a = analyses.get(m.id); return a ? OHA.makeItem(m, a.an, a.pb, { minOdds: cfg.minOdds, minLegOf }) : null; }).filter(Boolean);
+  }
+  const itOf = id => curItems.find(i => i.id === id);
+  const candOf = (id, k) => { const i = itOf(id); return i && i.cands.find(c => c.k === k); };
+  function planStats(plan) {
+    let cost = 0, exp = 0, maxRet = 0;
+    plan.singles.forEach(s => { const c = candOf(s.id, s.k); cost += s.stake; exp += s.stake * c.p * c.odds; maxRet += s.stake * c.odds; });
+    let pr = null;
+    if (plan.parlay) {
+      const L = plan.parlay.legs.map(l => { const i = itOf(l.id), c = candOf(l.id, l.k); return { odds: c.odds, p: c.p, minLeg: i.minLeg || 1 }; });
+      const t = OHP.SYS[L.length].find(x => x[0] === plan.parlay.type); pr = OHP.calcSystem(L, t[1], plan.parlay.stakePer);
+      cost += pr.cost; exp += pr.expRet; maxRet += pr.maxRet;
+    }
+    return { cost, exp, maxRet, ev: cost ? exp / cost - 1 : 0, pr };
+  }
+  function renderPlan() {
+    const el = $('aiOut'); if (!curPlan) { el.innerHTML = ''; return; }
+    const p = curPlan, st = planStats(p), L = k => OHA.LAB[k];
+    let h = `<div class="plan"><h4>${p.src === 'ai' ? 'Gemini 方案' : '規則方案'}</h4><div>${esc(p.summary)}</div></div>`;
+    if (p.singles.length) h += `<div class="plan"><h4>單場</h4>${p.singles.map(s => { const i = itOf(s.id), c = candOf(s.id, s.k); return `<div class="pl"><span><span class="gr ${i.grade}">${i.grade}</span>${esc(i.label)}<br><b>${L(s.k)}</b> @${c.odds}・機率${pct(c.p)}・期望${(c.ev * 100).toFixed(0)}%</span><b>${s.stake} 元</b><div class="rs">${esc(s.reason)}${p.news && p.news[s.id] ? `<br>消息:${esc(p.news[s.id])}` : ''}</div></div>`; }).join('')}</div>`;
+    if (p.parlay && st.pr) { const r = st.pr; h += `<div class="plan"><h4>系統串關 ${esc(p.parlay.type)}(${r.bets} 注 × ${p.parlay.stakePer} 元)</h4>${p.parlay.legs.map(l => { const i = itOf(l.id), c = candOf(l.id, l.k); return `<div class="pl"><span>${esc(i.label)}<br><b>${L(l.k)}</b> @${c.odds}・機率${pct(c.p)}</span><b>${i.minLeg > 1 ? i.minLeg + '串起' : ''}</b></div>`; }).join('')}<div class="rs">${esc(p.parlay.reason)}。全中回收 ${Math.round(r.maxRet).toLocaleString()} 元・至少中一注 ${pct(r.pAny)}・回本機率 ${pct(r.pBreak)}</div></div>`; }
+    if (!p.singles.length && !p.parlay) h += '<div class="plan"><div>今天沒有建議投注的方案。</div></div>';
+    h += `<div class="plan"><h4>合計</h4><div class="pl"><span>投入</span><b>${st.cost.toLocaleString()} 元(預算 ${budget})</b><span>模型期望回收</span><b>${Math.round(st.exp).toLocaleString()} 元</b><span>期望值</span><b style="color:${st.ev < 0 ? 'var(--clay)' : 'var(--deep)'}">${(st.ev * 100).toFixed(0)}%</b></div></div>`;
+    if (p.risks && p.risks.length) h += `<div class="plan"><h4>風險</h4>${p.risks.map(r => `<div class="rs">・${esc(r)}</div>`).join('')}</div>`;
+    if (p.issues && p.issues.length) h += `<div class="hint">已自動修正:${p.issues.map(esc).join(';')}</div>`;
+    if (p.skips && p.skips.length) h += `<details class="note" style="margin-top:6px"><summary>略過的場次(${p.skips.length})</summary>${p.skips.map(s => { const i = itOf(s.id); return `<div class="rs" style="font-size:12.5px;color:var(--mute)">・${esc(i ? i.label : s.id)}:${esc(s.reason)}</div>`; }).join('')}</details>`;
+    h += `<div class="row" style="margin-top:10px"><button class="btn" id="planAdopt" ${(p.singles.length || p.parlay) ? '' : 'disabled'}>採用並記錄</button><span class="hint" style="margin:0">記錄後可在下方填入比分,驗證推薦準不準</span></div>`;
+    el.innerHTML = h;
+  }
+  function setPlan(plan) { curPlan = OHA.validatePlan(plan, curItems, aiOpts()); renderPlan(); }
+  function prepare() {
+    if (!db) { $('aiOut').innerHTML = '<div class="hint">歷史資料載入中…</div>'; return false; }
+    curItems = buildItems(); $('aiInfo').textContent = `${curItems.length} 場`;
+    if (!curItems.length) { $('aiOut').innerHTML = '<div class="hint">範圍內沒有賽事,先到賽事頁更新。</div>'; return false; }
+    return true;
+  }
+  $('aiRule').onclick = () => { if (!prepare()) return; setPlan(OHA.rulePlan(curItems, aiOpts())); };
+  $('aiGem').onclick = async () => {
+    if (!gem.key) { $('aiOut').innerHTML = '<div class="hint">尚未設定 Gemini 金鑰。到「設定 → Gemini」貼上你的免費金鑰;或先用規則方案。</div>'; return; }
+    if (!prepare()) return;
+    const btn = $('aiGem'); btn.disabled = true; $('aiOut').innerHTML = `<div class="hint">Gemini 分析中${gem.search ? '(含搜尋,約 20~60 秒)' : ''}…</div>`;
+    try {
+      const rank = curItems.slice().sort((a, b) => (b.best ? b.best.ev : -9) - (a.best ? a.best.ev : -9));
+      const prompt = OHA.buildPrompt(rank, { budget, minOdds: cfg.minOdds, search: gem.search, SYSnames: SYSNAMES(), maxItems: 25 });
+      const plan = await OHA.callGemini(gem.key, gem.model, prompt, gem.search);
+      plan.src = 'ai'; setPlan(plan);
+    } catch (e) { $('aiOut').innerHTML = `<div class="hint">Gemini 失敗:${esc(e.message)}。可能是金鑰錯誤或免費額度用完(稍後再試),也可先用規則方案。</div>`; }
+    btn.disabled = false;
+  };
+  $('aiOut').addEventListener('click', e => {
+    if (e.target.id !== 'planAdopt' || !curPlan) return;
+    const p = curPlan, pid = 'P' + Date.now(), ts = Date.now(), st = planStats(p);
+    const ent = (kind, id, k, stake) => { const i = itOf(id), c = candOf(id, k); return { uid: pid + id + k + kind, pid, kind, id, date: i.date, label: i.label, k, odds: c.odds, p: c.p, ev: c.ev, stake, src: p.src, ts, hit: null }; };
+    p.singles.forEach(s => LOG.push(ent('單場', s.id, s.k, s.stake)));
+    if (p.parlay) { p.parlay.legs.forEach(l => LOG.push(ent('串關腿', l.id, l.k, 0))); PLANS.push({ pid, src: p.src, type: p.parlay.type, stakePer: p.parlay.stakePer, legs: p.parlay.legs.map(l => ({ id: l.id, k: l.k, odds: candOf(l.id, l.k).odds, p: candOf(l.id, l.k).p, minLeg: itOf(l.id).minLeg || 1 })), ts, date: (itOf(p.parlay.legs[0].id) || {}).date, ret: null, cost: st.pr.cost }); }
+    settle(); saveLog(); renderLog(); e.target.disabled = true; e.target.textContent = '已記錄';
+  });
+  // 結算:有比分的場次判定輸贏
+  function settle() {
+    LOG.forEach(x => { const s = SCORES[x.id]; if (s && x.hit == null) x.hit = OHA.judge(x.k, s[0], s[1]); });
+    PLANS.forEach(pl => {
+      if (pl.ret != null) return; if (!pl.legs.every(l => SCORES[l.id])) return;
+      const r = OHP.calcSystem(pl.legs, (OHP.SYS[pl.legs.length].find(t => t[0] === pl.type) || [0, []])[1], pl.stakePer);
+      pl.ret = r.combos.reduce((t, c) => t + (c.ix.every(i => OHA.judge(pl.legs[i].k, SCORES[pl.legs[i].id][0], SCORES[pl.legs[i].id][1])) ? c.odds * pl.stakePer : 0), 0);
+    });
+  }
+  function renderLog() {
+    settle(); const box = $('logBox'); if (!box) return;
+    const pend = {}; LOG.filter(x => x.hit == null).forEach(x => { (pend[x.id] = pend[x.id] || { label: x.label, date: x.date, n: 0 }).n++; });
+    let h = '';
+    const ids = Object.keys(pend);
+    if (ids.length) h += `<div class="hint" style="margin-top:0">待填比分(格式:客-主,例如 1-2)</div>` + ids.map(id => `<div class="sg"><span style="flex:1">${esc(pend[id].label)}<span class="hint" style="margin:0"> ${esc((pend[id].date || '').slice(5))}</span></span><input data-sc="${esc(id)}" placeholder="1-2" inputmode="text"><button class="btn sm alt" data-ok="${esc(id)}">結算</button></div>`).join('');
+    const S = f => OHA.stats(LOG.filter(f)), A = S(() => true);
+    const row = (t, s) => `<div class="pl"><span style="white-space:nowrap">${t}</span><b>${s.done ? `${s.hits}/${s.done} 中(${pct(s.hitRate)})・模型預期 ${pct(s.expHit)}・平均每注報酬 ${(s.roi * 100).toFixed(0)}%(預期 ${(s.expRoi * 100).toFixed(0)}%)` : `${s.n} 筆待結算`}</b></div>`;
+    h += `<div class="plan"><h4>推薦成績(各 1 單位平注)</h4>${row('全部', A)}${row('規則方案', S(x => x.src === 'rule'))}${row('Gemini 方案', S(x => x.src === 'ai'))}${row('單場', S(x => x.kind === '單場'))}</div>`;
+    const dp = PLANS.filter(p => p.ret != null), cost = dp.reduce((t, p) => t + p.cost, 0), ret = dp.reduce((t, p) => t + p.ret, 0);
+    h += `<div class="plan"><h4>系統串關實際損益</h4><div class="rs">${dp.length ? `${dp.length} 組已結算:投入 ${cost.toLocaleString()} 元,回收 ${Math.round(ret).toLocaleString()} 元,報酬 ${((ret / cost - 1) * 100).toFixed(0)}%` : '尚無已結算的串關'}</div></div>`;
+    h += `<div class="hint">樣本少時(幾十筆以內)命中率與報酬的隨機波動很大,不能據此判斷 AI 有沒有用。至少累積 100 筆以上再看,並比較「實際」與「模型預期」。</div>`;
+    h += `<div class="row" style="margin-top:8px"><button class="btn line sm" id="logClr">清除紀錄</button></div>`;
+    box.innerHTML = h;
+  }
+  $('logBox').addEventListener('click', e => {
+    const ok = e.target.closest('[data-ok]');
+    if (ok) { const id = ok.dataset.ok, inp = $('logBox').querySelector(`[data-sc="${CSS.escape(id)}"]`), s = OHA.parseScore(inp.value); if (!s) { inp.style.borderColor = 'var(--clay)'; return; } SCORES[id] = s; settle(); saveLog(); renderLog(); }
+    if (e.target.id === 'logClr' && confirm('清除所有推薦紀錄?')) { LOG = []; PLANS = []; SCORES = {}; saveLog(); renderLog(); }
+  });
+  function renderAIScope() {
+    const ds = days(), opts = [['0', `今天 ${md(ds[0])}`], ['1', `明天 ${md(ds[1])}`], ['both', '今明兩天']];
+    $('aiScope').innerHTML = opts.map(([v, t]) => `<button class="chp ${String(scope) === v ? 'on' : ''}" data-v="${v}">${t}</button>`).join('');
+  }
+  $('aiScope').onclick = e => { const b = e.target.closest('.chp'); if (!b) return; scope = b.dataset.v; store.set('oh_scope', scope); renderAIScope(); renderScope(); renderMine(); renderParlay(); curPlan = null; renderPlan(); };
+  $('aiBudget').value = budget; $('aiBudget').onchange = e => { budget = Math.max(10, Math.floor(+e.target.value / 10) * 10 || 1000); e.target.value = budget; store.set('oh_budget', budget); };
+  $('sGKey').value = gem.key; $('sGModel').value = gem.model; $('sGSearch').checked = gem.search;
+  $('sGSave').onclick = () => { gem = { key: $('sGKey').value.trim(), model: $('sGModel').value.trim() || 'gemini-2.5-flash', search: $('sGSearch').checked }; store.set('oh_gem', gem); alert('已儲存'); };
+  $('sGClear').onclick = () => { gem.key = ''; $('sGKey').value = ''; store.set('oh_gem', gem); };
+  renderAIScope(); renderLog();
 
   // ---------- 玩運彩 ----------
   const gtOf = s => s.replace(/-/g, '');
