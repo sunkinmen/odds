@@ -1,0 +1,201 @@
+/* 投注顧問:規則式解讀 + 方案(免金鑰)、Gemini 方案(自備免費金鑰)、紀錄結算。瀏覽器 / Node 共用。
+ * 原則:AI 只能從模型算出的候選裡挑;賠率、機率一律用本機計算值;預算由使用者設定且不可超過。 */
+(function (root) {
+  const LAB = { H: '主勝', D: '和局', A: '客勝', U: '小分(總進球≤2)', O: '大分(總進球≥3)', O35: '大3.5(總進球≥4)', O45: '大4.5(總進球≥5)' };
+  const P0 = x => Math.round(x * 100) + '%';
+  const r10 = x => Math.max(0, Math.floor(x / 10) * 10);
+
+  /* ---- 把分析結果整理成顧問用的 item(純資料) ---- */
+  function makeItem(m, an, pb, o) {
+    o = o || {};
+    const S = an.scoreSum, best = pb.best;
+    const cands = pb.all.filter(c => c.odds >= (o.minOdds || 1.3)).map(c => ({ k: c.key, label: LAB[c.key], odds: c.odds, p: c.p, pm: c.pm, ev: c.ev, hist: c.hist ? c.hist.roi : null }));
+    const lay = {}; ['L1', 'L2', 'L3', 'L4'].forEach(k => { const L = an.layers[k], n = L.c[0] + L.c[1] + L.c[2]; lay[k] = { n, c: L.c.slice() }; });
+    const fix = k => k.split('-').map(Number);
+    const tops = S.top.map(x => { const [a, b] = fix(x.key); return { score: an.strongHome ? `客${b}:主${a}` : `客${a}:主${b}`, pct: x.p, cnt: x.cnt, res: x.res }; });
+    const it = { id: m.id, label: `${m.away} @ ${m.home}`, away: m.away, home: m.home, league: m.league || (an.resolved.league || ''), time: m.time || '', date: m.date || '', minLeg: o.minLegOf ? o.minLegOf(m) : (m.minLeg || 1), cands, tops, nScore: S.n, layers: lay, strongName: an.strongName, strongHome: an.strongHome, pRes: S.pRes, anomaly: an.anomaly.flag ? { n: an.anomaly.n, pick: an.toHDA(an.anomaly.pick) } : null, unknownTeam: [an.resolved.home, an.resolved.away].some(x => x.id < 0) };
+    it.best = best ? it.cands.find(c => c.k === best.key && c.odds === best.odds) || null : null;
+    const ex = explain(it, an); it.grade = ex.grade; it.reasons = ex.reasons; it.warns = ex.warns;
+    return it;
+  }
+
+  /* ---- 規則式解讀(不需金鑰) ---- */
+  function explain(it, an) {
+    const c = it.best, reasons = [], warns = [];
+    if (!c) return { grade: 'C', reasons: ['沒有同時滿足最低賠率與最低機率的選項'], warns: [] };
+    const idx = c.k === 'H' ? (it.strongHome ? 0 : 2) : c.k === 'A' ? (it.strongHome ? 2 : 0) : c.k === 'D' ? 1 : null;
+    { const L1 = it.layers.L1, n1 = L1 ? L1.n : 0, d = c.p - c.pm, se = n1 >= 5 ? 1.96 * Math.sqrt(c.p * (1 - c.p) / n1) : 0.1;
+      reasons.push(`賠率 ${c.odds} 要命中 ${P0(1 / c.odds)} 才打平,模型估 ${P0(c.p)}(每投100元平均拿回 ${(100 * (1 + c.ev)).toFixed(0)} 元)`);
+      reasons.push(`市場扣水後認為 ${P0(c.pm)},模型${Math.abs(d) < se ? `只差 ${(d * 100).toFixed(1)} 點,小於樣本誤差 ±${(se * 100).toFixed(0)} 點,等同持平` : `${d >= 0 ? '高' : '低'}於市場 ${Math.abs(d * 100).toFixed(1)} 點`};評等只看相對優勢與層間一致性,不代表會賺`); }
+    let agree = 0, tot = 0;
+    if (idx != null) ['L1', 'L2', 'L3', 'L4'].forEach(k => { const L = it.layers[k]; if (L.n >= 5) { tot++; if (L.c.indexOf(Math.max(...L.c)) === idx) agree++; } });
+    if (idx != null && tot) reasons.push(`${tot} 層有足夠樣本,其中 ${agree} 層最常見結果與此選項一致`);
+    if (idx != null && it.tops.length) { const t = it.tops[0]; reasons.push(`最常見比分 ${t.score}(${P0(t.pct)},母數 ${it.nScore} 場)${t.res === idx ? ',與此選項同向' : ',與此選項不同向'}`); }
+    if (c.hist != null) reasons.push(`同市場同賠率區間歷史平均報酬 ${(c.hist * 100).toFixed(0)}%`);
+    if (it.anomaly) reasons.push(`罕見賠率組合:歷史 ${it.anomaly.n} 場多數同向(${it.anomaly.pick}),但回測中此訊號沒有勝過選熱門`);
+    if (it.layers.L1.n < 8) warns.push(`強隊同賠率樣本僅 ${it.layers.L1.n} 場,參考性低`);
+    if (it.unknownTeam) warns.push('有球隊查無歷史,四層樣本可能不足');
+    if (c.odds >= 4) warns.push('高賠率區間歷史報酬明顯偏負(約 −34%),命中率也低');
+    if (c.ev < 0) warns.push('期望值為負:長期平均會虧,只是相對較佳的選項');
+    const bad = warns.filter(w => w.indexOf('期望值為負') < 0).length;
+    let g = 'C';
+    const edge = (c.p - c.pm) * c.odds;   // 模型相對市場的優勢(扣掉水位後的相對評等,不是絕對期望值)
+    if (edge >= 0.04 && agree >= 3) g = 'A'; else if (edge >= 0.01 && agree >= 2) g = 'B';
+    if (bad >= 1 && g === 'A') g = 'B'; else if (bad >= 2 && g === 'B') g = 'C';
+    return { grade: g, reasons, warns, agree, tot };
+  }
+
+  /* ---- 規則方案:單場 + 系統串關,受預算限制 ---- */
+  function rulePlan(items, o) {
+    o = Object.assign({ budget: 1000, minOdds: 1.6, minProb: 0.4, maxSingles: 3, SYS: null, calc: null }, o || {});
+    const el = items.filter(i => i.best && i.best.odds >= o.minOdds && i.best.p >= o.minProb).sort((a, b) => b.best.ev - a.best.ev);
+    const plan = { src: 'rule', summary: '', singles: [], parlay: null, skips: [], risks: [] };
+    const sBudget = o.budget * 0.4, pBudget = o.budget * 0.6;
+    const good = el.filter(i => i.grade !== 'C'), ss = good.slice(0, o.maxSingles);
+    ss.forEach(i => plan.singles.push({ id: i.id, k: i.best.k, stake: r10(sBudget / Math.max(1, ss.length)), reason: i.reasons[0] }));
+    const used = new Set();
+    const legs = good.slice(0, 4);
+    if (legs.length >= 2 && o.SYS && o.calc) {
+      const N = legs.length, L = legs.map(i => ({ odds: i.best.odds, p: i.best.p, minLeg: i.minLeg || 1 }));
+      let bestT = null;
+      (o.SYS[N] || []).forEach(t => {
+        const r = o.calc(L, t[1], 1); if (!r.bets) return;
+        const per = r10(pBudget / r.bets); if (per < 10) return;
+        if (!bestT || r.ev > bestT.r.ev) bestT = { t, r, per };
+      });
+      if (bestT) plan.parlay = { type: bestT.t[0], legs: legs.map(i => ({ id: i.id, k: i.best.k })), stakePer: bestT.per, reason: `取期望值較高的 ${N} 場,${bestT.t[0]} 共 ${bestT.r.bets} 注` };
+    }
+    plan.skips = items.filter(i => !el.includes(i)).slice(0, 8).map(i => ({ id: i.id, reason: i.best ? '機率或賠率未達設定門檻' : '沒有合格選項' }));
+    plan.summary = good.length ? `從 ${items.length} 場中挑出 ${good.length} 場評等 A/B 且合格的場次,依期望值排序;單場取前 ${ss.length} 場${plan.parlay ? ',另配一組系統串關' : ''}。` : el.length ? `${el.length} 場雖達賠率與機率門檻,但評等都是 C(樣本不足、期望值明顯為負或有警示),建議今天不投注。若仍想看,可到賽事頁逐場查看。` : `${items.length} 場中沒有場次同時滿足最低賠率 ${o.minOdds} 與最低機率 ${P0(o.minProb)},建議今天不投注。`;
+    plan.risks = ['期望值多為負,長期平均會虧損(回測:各層與組合在樣本外都沒勝過市場)', '這只是依規則排序的結果,不含傷兵、陣容等消息面'];
+    return plan;
+  }
+
+  /* ---- 驗證方案(不論來源):只允許本機算出的候選、預算不得超過 ---- */
+  function validatePlan(plan, items, o) {
+    o = Object.assign({ budget: 1000, minOdds: 1.6, SYS: null, calc: null }, o || {});
+    const by = new Map(items.map(i => [i.id, i])), issues = [];
+    const out = { src: plan.src || 'ai', summary: String(plan.summary || ''), singles: [], parlay: null, skips: [], risks: (plan.risks || []).map(String).slice(0, 6), news: plan.news || {} };
+    const seen = new Set();
+    (plan.singles || []).forEach(s => {
+      const it = by.get(s.id), c = it && it.cands.find(x => x.k === s.k);
+      if (!it || !c) { issues.push(`單場「${s.id}」不在候選中,已剔除`); return; }
+      if (c.odds < o.minOdds) { issues.push(`${it.label} 賠率 ${c.odds} 低於門檻,已剔除`); return; }
+      if (seen.has(s.id)) return; seen.add(s.id);
+      out.singles.push({ id: s.id, k: s.k, stake: r10(+s.stake || 0), reason: String(s.reason || '') });
+    });
+    const P = plan.parlay;
+    if (P && P.legs && o.SYS && o.calc) {
+      const legs = []; const ids = new Set();
+      P.legs.forEach(l => { const it = by.get(l.id), c = it && it.cands.find(x => x.k === l.k); if (it && c && c.odds >= o.minOdds && !ids.has(l.id)) { ids.add(l.id); legs.push({ id: l.id, k: l.k }); } else issues.push(`串關腿「${l.id}」無效,已剔除`); });
+      const N = legs.length, t = (o.SYS[N] || []).find(x => x[0] === P.type);
+      if (N >= 2 && t) {
+        const L = legs.map(l => { const it = by.get(l.id), c = it.cands.find(x => x.k === l.k); return { odds: c.odds, p: c.p, minLeg: it.minLeg || 1 }; });
+        const r = o.calc(L, t[1], 1);
+        if (r.bets) out.parlay = { type: P.type, legs, stakePer: r10(+P.stakePer || 0), reason: String(P.reason || '') };
+        else issues.push('串關型態與場次的最低串數不相容,已剔除');
+      } else if (P.legs.length) issues.push(`串關型態「${P.type}」與有效場數 ${N} 不符,已剔除`);
+    }
+    // 預算
+    const cost = () => out.singles.reduce((t, s) => t + s.stake, 0) + (out.parlay ? out.parlay.stakePer * (function () { const L = out.parlay.legs.map(l => { const it = by.get(l.id), c = it.cands.find(x => x.k === l.k); return { odds: c.odds, p: c.p, minLeg: it.minLeg || 1 }; }); return o.calc(L, o.SYS[out.parlay.legs.length].find(x => x[0] === out.parlay.type)[1], 1).bets; })() : 0);
+    let c0 = cost();
+    if (c0 > o.budget && c0 > 0) { const f = o.budget / c0; out.singles.forEach(s => s.stake = r10(s.stake * f)); if (out.parlay) out.parlay.stakePer = r10(out.parlay.stakePer * f); issues.push(`原方案 ${c0} 元超過預算 ${o.budget},已等比例縮減`); }
+    out.singles = out.singles.filter(s => s.stake >= 10); if (out.parlay && out.parlay.stakePer < 10) out.parlay = null;
+    out.cost = cost(); out.issues = issues;
+    out.skips = (plan.skips || []).filter(s => by.has(s.id)).map(s => ({ id: s.id, reason: String(s.reason || '') })).slice(0, 12);
+    return out;
+  }
+
+  /* ---- Gemini ---- */
+  function buildPrompt(items, o) {
+    const r2 = x => +x.toFixed(2);
+    const rows = items.slice(0, o.maxItems || 12).map(i => {
+      const cs = i.cands.slice().sort((a, b) => b.ev - a.ev).slice(0, o.maxCands || 3);
+      return {
+        id: i.id, 賽事: i.label, 時間: i.time, 最低串數: i.minLeg > 1 ? i.minLeg : undefined,
+        選項: cs.map(c => [c.k, c.odds, r2(c.p), r2(c.pm), r2(c.ev)]),
+        評等: i.grade, 提醒: i.warns.length ? i.warns.slice(0, 2).map(w => w.slice(0, 24)) : undefined
+      };
+    });
+    const types = Object.keys(o.SYSnames || {}).length ? o.SYSnames : {};
+    return `你是足球投注風險顧問,使用繁體中文。以下是台灣運彩足球賽事,賠率、機率、期望值皆為本機模型算出,不可更改或自行編造。\n` +
+      `重要背景:回測顯示模型在樣本外沒有勝過市場,多數選項期望值為負;你的工作是在這個前提下做相對較佳、風險受控的選擇,並誠實指出風險,不可宣稱穩賺。\n` +
+      `限制:每日預算 ${o.budget} 元(含單場與串關總額,不得超過,金額為 10 的倍數);只能從下列賽事與選項(用 id 與 k 指定)挑;賠率需 ≥ ${o.minOdds};有「最低串數」的賽事只能放進場數 ≥ 該值的串關;串關型態從 ${JSON.stringify(types)} 中選(鍵=串關場數,值=可用型態)。\n` +
+      (o.search ? `請先用搜尋查各場的傷兵、停賽、陣容輪換與近期狀況,把有影響的重點寫在 news(以 id 為鍵,一句話),找不到就不要寫。\n` : '') +
+      `只輸出 JSON,格式:{"summary":"一兩句總結","singles":[{"id":"","k":"H|D|A|U|O|O35|O45","stake":數字,"reason":"一句話理由"}],"parlay":{"type":"如 4串5","legs":[{"id":"","k":""}],"stakePer":每注金額,"reason":""}或null,"skips":[{"id":"","reason":""}],"risks":["風險1","風險2"],"news":{"id":"重點"}}\n` +
+      `若沒有值得投注的場次,singles 與 parlay 留空並在 summary 說明建議不投注。\n賽事資料(選項欄位依序為 [k, 賠率, 模型機率, 市場機率, 期望值],已按期望值排序,只列前幾名;評等 A/B/C 為規則評等;所有說明請簡短,每個 reason 不超過 25 字):\n` + JSON.stringify(rows);
+  }
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const GemErr = (msg, code) => Object.assign(new Error(msg), { code });
+  async function callGemini(key, model, prompt, search, fetchImpl, opt) {
+    const f = fetchImpl || fetch, o = opt || {};
+    const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 16384 } };
+    if (search) body.tools = [{ google_search: {} }]; else body.generationConfig.responseMimeType = 'application/json';
+    const url = `${GBASE}/models/${encodeURIComponent(model)}:generateContent`, tries = o.tries || 3;
+    let last;
+    for (let k = 0; k < tries; k++) {
+      const ac = typeof AbortController !== 'undefined' ? new AbortController() : null, tm = ac ? setTimeout(() => ac.abort(), o.timeoutMs || 120000) : null;
+      try {
+        const r = await f(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body), signal: ac ? ac.signal : undefined });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          const msg = (j.error && j.error.message) || ('HTTP ' + r.status);
+          if ([429, 500, 502, 503, 504].indexOf(r.status) >= 0 && k < tries - 1) { if (o.onRetry) o.onRetry(k + 1, r.status); last = GemErr(msg, 'busy'); await sleep(r.status === 429 ? 8000 * (k + 1) : 3000 * (k + 1)); continue; }
+          throw GemErr(msg, r.status === 429 ? 'quota' : r.status === 503 ? 'busy' : 'http');
+        }
+        const cand = (j.candidates || [])[0] || {};
+        const txt = ((cand.content || {}).parts || []).map(p => p.text || '').join('');
+        if (!txt) throw GemErr(j.promptFeedback && j.promptFeedback.blockReason ? 'AI 拒絕回應(' + j.promptFeedback.blockReason + ')' : 'AI 回傳空白(' + (cand.finishReason || '未知原因') + ')', 'empty');
+        try { return parseJson(txt); }
+        catch (e) { throw GemErr(cand.finishReason === 'MAX_TOKENS' ? 'AI 回覆太長被截斷' : 'AI 回傳的不是完整 JSON', 'cut'); }
+      } catch (e) {
+        if (e.name === 'AbortError') { last = GemErr('等待超過 ' + Math.round((o.timeoutMs || 120000) / 1000) + ' 秒沒有回應', 'timeout'); if (k < tries - 1) { if (o.onRetry) o.onRetry(k + 1, 'timeout'); continue; } throw last; }
+        if (e.code === 'busy' && k < tries - 1) { last = e; continue; }
+        throw e;
+      } finally { if (tm) clearTimeout(tm); }
+    }
+    throw last || GemErr('Gemini 無回應', 'http');
+  }
+  function parseJson(t) {
+    t = String(t || '').replace(/```json|```/g, '');
+    const a = t.indexOf('{'), b = t.lastIndexOf('}'); if (a < 0 || b < a) throw new Error('AI 沒有回傳 JSON');
+    return JSON.parse(t.slice(a, b + 1));
+  }
+
+  /* ---- 紀錄結算 ---- */
+  function judge(key, ga, gh) { return key === 'H' ? gh > ga : key === 'A' ? ga > gh : key === 'D' ? ga === gh : key === 'O' ? ga + gh >= 3 : key === 'O35' ? ga + gh >= 4 : key === 'O45' ? ga + gh >= 5 : ga + gh <= 2; }
+  function parseScore(s) { const m = String(s || '').match(/^\s*(\d{1,2})\s*[-:：]\s*(\d{1,2})\s*$/); return m ? [+m[1], +m[2]] : null; }   // 客-主
+  function stats(log) {
+    const done = log.filter(x => x.hit != null);
+    const o = { n: log.length, done: done.length, hits: done.filter(x => x.hit).length, ret: 0, stake: 0, expP: 0, expEv: 0 };
+    done.forEach(x => { o.stake += 1; o.ret += x.hit ? x.odds : 0; o.expP += x.p; o.expEv += x.ev; });
+    o.hitRate = o.done ? o.hits / o.done : 0; o.roi = o.done ? o.ret / o.stake - 1 : 0; o.expHit = o.done ? o.expP / o.done : 0; o.expRoi = o.done ? o.expEv / o.done : 0;
+    return o;
+  }
+  /* ---- Gemini 模型清單 / 連線測試 ---- */
+  const GBASE = 'https://generativelanguage.googleapis.com/v1beta';
+  async function listModels(key, fetchImpl) {
+    const f = fetchImpl || fetch; let out = [], tok = '';
+    for (let n = 0; n < 5; n++) {
+      const r = await f(`${GBASE}/models?pageSize=200${tok ? '&pageToken=' + encodeURIComponent(tok) : ''}`, { headers: { 'x-goog-api-key': key } });
+      const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error((j.error && j.error.message) || ('HTTP ' + r.status));
+      out = out.concat(j.models || []); tok = j.nextPageToken || ''; if (!tok) break;
+    }
+    const ok = out.filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && /^models\/gemini/.test(m.name) && !/embed|tts|image|live|audio|robotics|computer-use|aqa|learnlm/i.test(m.name))
+      .map(m => ({ id: m.name.replace(/^models\//, ''), name: m.displayName || m.name, desc: m.description || '' }));
+    const ver = s => { const m = s.match(/gemini-(\d+(?:\.\d+)?)/); return m ? +m[1] : 0; };
+    const score = s => ver(s.id) * 10 + (/flash/.test(s.id) ? 3 : 0) - (/lite/.test(s.id) ? 1 : 0) - (/preview|exp|latest|\d{3}$/.test(s.id) ? 2 : 0);
+    ok.sort((x, y) => score(y) - score(x));
+    return ok;
+  }
+  function pickDefault(models) { const m = models.find(x => /flash/.test(x.id) && !/lite|preview|exp/.test(x.id)) || models.find(x => /flash/.test(x.id)) || models[0]; return m ? m.id : ''; }
+  async function testModel(key, model, fetchImpl) {
+    const f = fetchImpl || fetch, t0 = Date.now();
+    const r = await f(`${GBASE}/models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: '只回覆 OK' }] }], generationConfig: { maxOutputTokens: 16, temperature: 0 } }) });
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error((j.error && j.error.message) || ('HTTP ' + r.status));
+    return { ms: Date.now() - t0, text: ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || '').join('').trim() };
+  }
+  const isModelGone = msg => /not found|no longer available|not supported for generateContent|is not supported|deprecated|404/i.test(String(msg || ''));
+  const api = { listModels, pickDefault, testModel, isModelGone, makeItem, explain, rulePlan, validatePlan, buildPrompt, callGemini, parseJson, judge, parseScore, stats, LAB };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OHA = api;
+})(typeof self !== 'undefined' ? self : this);

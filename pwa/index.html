@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0b">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>賠率獵人</title>
+<style>
+:root{
+  --bg:#f3efe9;--paper:#fbf8f3;--ink:#2f2d2a;--mute:#8a857c;--line:#e4ded4;
+  --deep:#4f5f52;--sage:#7f917f;--sage-s:#dde5dc;--clay:#b98f84;--clay-s:#f1e2dd;--sand:#cdb98f;--sand-s:#f1e9d7;--mist:#94a8b4;--mist-s:#e0e8ec;
+  --shadow:0 1px 0 rgba(60,50,40,.04),0 8px 24px -14px rgba(60,50,40,.28);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#1d1d1b;--paper:#282825;--ink:#ece8e0;--mute:#9b968c;--line:#3a3935;
+  --deep:#a9bcab;--sage:#8a9a8c;--sage-s:#2f3a31;--clay:#c9a298;--clay-s:#3b2f2c;--sand:#b9a77f;--sand-s:#37321f;--mist:#9fb3be;--mist-s:#2b343a;
+  --shadow:0 8px 24px -14px rgba(0,0,0,.6);}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;padding-bottom:calc(84px + env(safe-area-inset-bottom));max-width:640px;margin-inline:auto}
+button,input,select,textarea{font:inherit;color:inherit}
+button{border:0;cursor:pointer;touch-action:manipulation}
+.wrap{padding:0 16px}
+
+/* ---------- 頂部 ---------- */
+.top{position:sticky;top:0;z-index:5;background:linear-gradient(var(--bg) 82%,transparent);padding:calc(10px + env(safe-area-inset-top)) 16px 10px}
+.brand{display:flex;align-items:center;gap:10px}
+.mark{width:34px;height:34px;border-radius:11px;background:var(--deep);display:grid;place-items:center;flex:none}
+.mark svg{width:20px;height:20px;stroke:#f3efe9}
+.brand h1{margin:0;font-size:19px;letter-spacing:.06em;line-height:1.1}
+.brand small{display:block;color:var(--mute);font-size:11px;letter-spacing:.04em;margin-top:2px}
+.days{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.day{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:9px 12px;text-align:left;box-shadow:var(--shadow);transition:.18s}
+.day b{display:block;font-size:15px;letter-spacing:.04em}
+.day span{font-size:12px;color:var(--mute)}
+.day.on{background:var(--deep);border-color:var(--deep);color:#f3efe9}
+.day.on span{color:#d3dcd3}
+.day .cnt{float:right;font-size:12px;background:rgba(127,145,127,.2);border-radius:99px;padding:0 8px;line-height:20px;margin-top:1px;color:inherit}
+
+/* ---------- 通用 ---------- */
+.sec{margin:14px 0 6px;font-size:12px;letter-spacing:.14em;color:var(--mute);text-transform:uppercase}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:14px;margin:10px 0;box-shadow:var(--shadow)}
+.btn{background:var(--deep);color:#f3efe9;border-radius:12px;padding:10px 14px;min-height:42px;font-weight:600}
+.btn.alt{background:var(--sage-s);color:var(--deep)}
+.btn.line{background:transparent;border:1px solid var(--line);color:var(--ink);font-weight:500}
+.btn.sm{min-height:32px;padding:4px 11px;font-size:13px;border-radius:10px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grow{flex:1}
+input,select,textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:11px;padding:10px 12px}
+textarea{min-height:92px;resize:vertical}
+label.f{display:block;margin:12px 0 4px;font-size:12px;color:var(--mute);letter-spacing:.04em}
+.hint{font-size:12px;color:var(--mute);margin-top:6px}
+details.note{margin:6px 0 0;font-size:12.5px;color:var(--mute)}
+details.note summary{cursor:pointer;list-style:none;display:inline-flex;gap:6px;align-items:center;background:var(--clay-s);color:var(--clay);padding:4px 10px;border-radius:99px;font-weight:600}
+details.note summary::-webkit-details-marker{display:none}
+details.note p{margin:8px 2px 0;line-height:1.6;color:var(--ink)}
+.empty{text-align:center;color:var(--mute);padding:34px 14px}
+.empty svg{width:42px;height:42px;stroke:var(--sage);margin-bottom:8px}
+
+/* ---------- 賽事卡 ---------- */
+.match{display:grid;grid-template-columns:76px 1fr;gap:12px;background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:13px 13px 12px 0;margin:10px 0;box-shadow:var(--shadow);position:relative;overflow:hidden}
+
+.match.medal{border:2.5px solid transparent;padding-top:26px;background:linear-gradient(var(--paper),var(--paper)) padding-box,var(--mg) border-box;background-size:auto,300% 300%;animation:mshine 6s linear infinite}
+.match.gold{--mg:linear-gradient(120deg,#8a6a12,#f5d76e,#fff4b8,#d4a017,#8a6a12,#f5d76e);box-shadow:0 0 0 1px rgba(212,160,23,.25),0 4px 16px rgba(212,160,23,.35)}
+.match.silver{--mg:linear-gradient(120deg,#7d838b,#e8ecf0,#ffffff,#b4bac2,#7d838b,#e8ecf0);box-shadow:0 0 0 1px rgba(150,158,168,.3),0 4px 14px rgba(150,158,168,.35)}
+.match.bronze{--mg:linear-gradient(120deg,#6e3b1c,#d58a52,#f3c39a,#b8693a,#6e3b1c,#d58a52);box-shadow:0 0 0 1px rgba(184,105,58,.25),0 4px 14px rgba(184,105,58,.3)}
+.mbadge{position:absolute;left:0;top:0;right:0;height:20px;line-height:20px;text-align:center;font-size:11px;font-weight:700;letter-spacing:.06em;color:#3a2a08;background:var(--mg);background-size:300% 300%;animation:mshine 6s linear infinite;z-index:1}
+.match.silver .mbadge{color:#2b2f34}.match.bronze .mbadge{color:#fff4e8}
+@keyframes mshine{0%{background-position:0 0,0% 50%}100%{background-position:0 0,300% 50%}}
+@media (prefers-reduced-motion:reduce){.match.medal,.mbadge{animation:none}}
+.match::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--rail,var(--line))}
+.match.pick{--rail:var(--sage)}.match.skip{--rail:var(--clay)}.match.flag{--rail:var(--sand)}
+.mt{padding-left:16px;text-align:left}
+.mt b{display:block;font-size:17px;letter-spacing:.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.mt span{display:block;font-size:10.5px;color:var(--mute);margin-top:4px;line-height:1.3}
+.lg{font-size:11px;color:var(--mute);letter-spacing:.03em}
+.teams{font-weight:650;font-size:16px;line-height:1.35;margin:1px 0 8px}
+.teams .at{color:var(--mute);font-weight:400;margin:0 5px;font-size:13px}
+.odds{display:grid;grid-template-columns:repeat(3,1fr) .8fr .8fr;gap:5px}
+.o{border:1px solid var(--line);border-radius:11px;padding:5px 0 4px;text-align:center;font-variant-numeric:tabular-nums;font-weight:650;font-size:15px;line-height:1.2;background:var(--bg)}
+.o i{display:block;font-style:normal;font-size:10.5px;font-weight:500;color:var(--mute);letter-spacing:.1em}
+.o.hit{background:var(--deep);border-color:var(--deep);color:#f3efe9}
+.o.hit i{color:#cfd9cf}
+.o.u{background:transparent;border-style:dashed}
+.o.u.hit{background:var(--mist);border-color:var(--mist);color:#1f2a30;border-style:solid}
+.o.u.hit i{color:#2c3b44}
+.verdict{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:13px;flex-wrap:wrap}
+.tag{display:inline-flex;align-items:center;gap:5px;border-radius:99px;padding:2px 9px;font-size:12px;font-weight:600;background:var(--sage-s);color:var(--deep)}
+.tag.skip{background:var(--clay-s);color:var(--clay)}.tag.flag{background:var(--sand-s);color:#8a7646}.tag.plain{background:var(--bg);color:var(--mute);font-weight:500;border:1px solid var(--line)}
+@media (prefers-color-scheme:dark){.tag.flag{color:var(--sand)}}
+.meter{flex:1;min-width:80px;height:6px;border-radius:9px;background:var(--line);position:relative;overflow:hidden}
+.meter i{position:absolute;left:0;top:0;bottom:0;background:var(--sage);border-radius:9px}
+.meter b{position:absolute;top:-1px;bottom:-1px;width:2px;background:var(--ink);opacity:.55}
+.det{display:none;grid-column:1/-1;padding:4px 0 0 16px;margin-top:2px;border-top:1px dashed var(--line)}
+.match.open .det{display:block}
+.lay{display:grid;grid-template-columns:1fr 38px;gap:2px 8px;margin:9px 0;font-size:12.5px;align-items:center}
+.lay .n{color:var(--mute);text-align:right;font-variant-numeric:tabular-nums}
+.sb{display:flex;height:9px;border-radius:6px;overflow:hidden;background:var(--line);grid-column:1/-1;margin-bottom:5px}
+.sb i{display:block}.sb .w{background:var(--sage)}.sb .d{background:var(--sand)}.sb .l{background:var(--clay)}
+.lg2{font-size:11.5px;color:var(--mute);display:flex;gap:12px;margin-top:4px}
+.lg2 s{display:inline-block;width:8px;height:8px;border-radius:3px;margin-right:4px;text-decoration:none}
+
+/* ---------- 串關票券 ---------- */
+.ticket{position:relative;background:var(--paper);border:1px solid var(--line);border-radius:18px;margin:12px 0;box-shadow:var(--shadow);overflow:hidden}
+.ticket .hd{display:flex;align-items:flex-end;justify-content:space-between;padding:13px 16px 11px;background:linear-gradient(135deg,var(--sage-s),transparent 70%)}
+.ticket .k{font-size:12px;color:var(--mute);letter-spacing:.12em}
+.ticket .big{font-size:26px;font-weight:700;letter-spacing:.01em;font-variant-numeric:tabular-nums;line-height:1.1}
+.ticket .big small{font-size:12px;font-weight:500;color:var(--mute);margin-left:4px}
+.rank{width:26px;height:26px;border-radius:50%;background:var(--deep);color:#f3efe9;display:grid;place-items:center;font-size:13px;font-weight:700;margin-right:10px;flex:none}
+.perf{position:relative;height:0;border-top:2px dashed var(--line);margin:0 14px}
+.perf::before,.perf::after{content:"";position:absolute;top:-10px;width:18px;height:18px;border-radius:50%;background:var(--bg);border:1px solid var(--line)}
+.perf::before{left:-24px}.perf::after{right:-24px}
+.legs{padding:10px 16px 6px}
+.leg{display:flex;gap:10px;justify-content:space-between;font-size:13.5px;padding:5px 0}
+.leg .pk{font-weight:700;white-space:nowrap}
+.leg .tm{color:var(--mute);font-size:11.5px}
+.ft{display:flex;gap:8px;padding:6px 16px 14px;flex-wrap:wrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chp{background:var(--paper);border:1px solid var(--line);border-radius:99px;padding:6px 13px;font-size:13px}
+.chp.on{background:var(--deep);border-color:var(--deep);color:#f3efe9}
+
+/* ---------- 底部導覽 ---------- */
+nav{position:fixed;left:0;right:0;margin:0 auto;bottom:calc(10px + env(safe-area-inset-bottom));width:min(420px,calc(100% - 28px));display:flex;background:color-mix(in srgb,var(--paper) 92%,transparent);backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:22px;padding:5px;box-shadow:0 14px 34px -14px rgba(40,35,30,.45);z-index:9}
+nav button{flex:1;background:transparent;color:var(--mute);border-radius:17px;padding:7px 0 6px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11.5px;letter-spacing:.06em}
+nav svg{width:22px;height:22px;stroke:currentColor}
+nav button.on{background:var(--deep);color:#f3efe9}
+svg{fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;border-radius:10px;font-size:11px;max-height:110px;overflow:auto}
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 4px}
+.stat div{background:var(--bg);border-radius:12px;padding:8px 10px}
+.stat b{display:block;font-size:17px;font-variant-numeric:tabular-nums}
+.stat span{font-size:11px;color:var(--mute)}
+.pos{color:var(--sage)}.neg{color:var(--clay)}
+.sc3{margin:10px 0 4px;padding:10px 12px;border-radius:14px;background:var(--bg);border:1px solid var(--line)}
+.sc3 h4{margin:0 0 6px;font-size:13px;color:var(--deep)}
+.scr{display:grid;grid-template-columns:76px 1fr 44px;gap:8px;align-items:center;font-size:13px;margin:5px 0}
+.scr b{font-variant-numeric:tabular-nums}.scr .bar{height:9px;border-radius:6px;background:var(--line);overflow:hidden}.scr .bar i{display:block;height:100%;background:var(--sage)}
+.scr small{color:var(--mute);grid-column:2/-1;margin-top:-3px}
+.opt{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center;padding:8px 10px;margin:6px 0;border:1px solid var(--line);border-radius:12px;font-size:13px;cursor:pointer;background:var(--paper)}
+.opt.on{border-color:var(--sage);background:var(--sage-s)}.opt.pos b.ev{color:var(--deep)}.opt b.ev{color:var(--clay)}
+.opt small{color:var(--mute);grid-column:1/-1}.opt .s2{color:var(--mute);font-size:11px}.opt .tag{font-style:normal;font-size:10px;background:var(--sage-s);color:var(--deep);border-radius:6px;padding:1px 5px}.vbar{grid-column:1/-1;position:relative;height:5px;background:var(--line);border-radius:3px}.vbar .pp{position:absolute;left:0;top:0;bottom:0;background:var(--sage);border-radius:3px;opacity:.7}.vbar .be{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--clay);z-index:1}
+.tbtn{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.mleg{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:13px}
+.mleg label{flex:1}.mleg input{width:auto}
+.kv{display:grid;grid-template-columns:1fr auto;gap:4px 10px;font-size:13.5px;margin-top:8px}.kv b{text-align:right;font-variant-numeric:tabular-nums}
+.plan{border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin:10px 0;background:var(--paper)}
+.plan h4{margin:0 0 4px;font-size:13.5px}.plan .rs{font-size:12.5px;color:var(--mute);margin-top:2px}
+.pl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:13.5px}.pl:last-child{border-bottom:0}
+.pl b{font-variant-numeric:tabular-nums}.pl .rs{grid-column:1/-1}
+.gr{display:inline-block;min-width:20px;text-align:center;border-radius:6px;font-size:11px;font-weight:700;padding:0 5px;margin-right:4px;background:var(--sand-s);color:#8a7646}
+.gr.A{background:var(--sage-s);color:var(--deep)}.gr.C{background:var(--clay-s);color:var(--clay)}
+.sg{display:flex;align-items:center;gap:6px;margin:6px 0;font-size:13px}.sg input{width:70px;padding:5px 8px}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand">
+    <div class="mark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
+    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.15</small></div>
+  </div>
+  <div class="days" id="days"></div>
+</div>
+
+<main id="tab-matches" class="wrap">
+  <div class="row" style="margin-top:2px">
+    <button class="btn sm" id="bSync">更新賽事</button>
+    <span class="grow"></span>
+    <button class="btn line sm" id="bClear">清空</button>
+  </div>
+  <details class="note" style="margin-top:8px"><summary>進階:手動匯入</summary>
+    <div class="row" style="margin-top:8px"><button class="btn alt sm" id="bPaste">貼上匯入</button><button class="btn alt sm" id="bHelp">抓取說明</button><button class="btn alt sm" id="bAdd">手動新增</button></div>
+  </details>
+  <div class="panel" id="importBox" style="display:none">
+    <label class="f" style="margin-top:0">貼上書籤抓到的內容、運彩頁面文字、擴充功能的 JSON,或每行一場「主隊 客隊 主勝 和 客勝 小分 [20:30] [日期]」。沒有日期的場次歸入目前選的那天。</label>
+    <textarea id="txt" placeholder="曼城 利物浦 2.1 3.4 3.2 1.9 22:00"></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn" id="bDo">匯入到目前日期</button><button class="btn line" id="bClip">讀取剪貼簿</button></div>
+  </div>
+  <div class="panel" id="addBox" style="display:none">
+    <div class="row"><input class="grow" id="aLeague" placeholder="聯賽(可省略)"></div>
+    <div class="row" style="margin-top:8px"><input class="grow" id="aHome" placeholder="主隊"><input class="grow" id="aAway" placeholder="客隊"></div>
+    <div class="row" style="margin-top:8px;flex-wrap:nowrap">
+      <input id="aH" inputmode="decimal" placeholder="主勝"><input id="aD" inputmode="decimal" placeholder="和"><input id="aA" inputmode="decimal" placeholder="客勝"><input id="aU" inputmode="decimal" placeholder="小分">
+    </div>
+    <div class="row" style="margin-top:8px"><input type="time" id="aT" class="grow"><button class="btn" id="aSave">加入</button></div>
+  </div>
+  <div class="panel" id="helpBox" style="display:none">
+    <b>每天怎麼更新賽事(資料來源:玩運彩,免登入)</b>
+    <ol style="margin:8px 0 0;padding-left:20px;line-height:1.7;font-size:13.5px">
+      <li>第一次:到「設定」按「複製玩運彩書籤」,存成 Safari 書籤(只做一次)。</li>
+      <li>用 Safari 開玩運彩任一頁(足球預測比例頁最好),按書籤。</li>
+      <li>書籤會抓今天+明天,<b>自動回到本 App 並匯入</b>,含小分賠率。</li>
+      <li>想完全自動(開 App 就更新):部署設定頁的 Worker 轉送,貼上網址後,按「更新賽事」或開啟 App 就會自動抓。</li>
+    </ol>
+    <div class="hint">iPhone 的網頁 App 不能在背景偷跑,最自動的程度就是「開 App 時自動更新」。運彩官網原本的書籤仍保留在設定頁,可抓最低串數等玩運彩沒有的資訊。</div>
+  </div>
+  <div class="hint" id="impMsg" style="white-space:pre-wrap"></div>
+  <details class="note"><summary>⚠ 先看回測結論</summary><p>用 2022–2023 預測 2025(6,000 場):相近賠率的歷史結果,並沒有比「直接選熱門」更準,長期 ROI 約 −15%;莊家抽水約 22%。這裡給的是歷史傾向,不是穩贏保證,請控制金額。</p></details>
+  <div id="list"></div>
+  <div class="hint" id="skipMsg" style="text-align:center"></div>
+</main>
+
+<main id="tab-parlay" class="wrap" style="display:none">
+  <div class="sec">我的選注・系統串關</div>
+  <div class="panel" id="mine"></div>
+  <div class="sec">自動推薦</div>
+  <div class="chips" id="scope"></div>
+  <div class="row" style="margin-top:12px"><span class="hint" style="margin:0">排序</span><button class="chp on" id="sEv">預期值</button><button class="chp" id="sP">命中率</button><span class="grow"></span><span class="hint" id="pInfo" style="margin:0"></span></div>
+  <div id="parlays"></div>
+</main>
+
+<main id="tab-ai" class="wrap" style="display:none">
+  <div class="sec">今日投注方案</div>
+  <div class="panel">
+    <div class="chips" id="aiScope"></div>
+    <div class="row" style="margin-top:10px"><span class="hint" style="margin:0">預算(元)</span><input id="aiBudget" inputmode="numeric" style="width:100px;padding:6px 10px"><span class="grow"></span><span class="hint" id="aiInfo" style="margin:0"></span></div>
+    <div class="row" style="margin-top:10px"><button class="btn" id="aiRule">規則方案(免金鑰)</button><button class="btn alt" id="aiGem">Gemini 方案</button></div>
+    <div class="hint">規則方案完全在手機上算,不需金鑰。Gemini 方案需在「設定」填入你自己的免費金鑰;AI 只能從模型算出的候選裡挑,賠率與機率不會被它改動,預算也不會被超過。</div>
+    <div id="aiOut"></div>
+  </div>
+  <div class="sec">推薦紀錄與驗證</div>
+  <div class="panel" id="logBox"></div>
+</main>
+
+<main id="tab-set" class="wrap" style="display:none">
+  <div class="sec">歷史資料庫</div>
+  <div class="panel">
+    <div style="font-weight:650" id="dbName">–</div>
+    <div class="stat"><div><b id="dbRows">–</b><span>場次</span></div><div><b id="dbFrom">–</b><span>最早</span></div><div><b id="dbTo">–</b><span>最新</span></div></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="bSwap">更換資料</button>
+      <button class="btn line" id="bReset">還原內建</button>
+      <button class="btn alt" id="bExport">下載新版 Excel</button>
+    </div>
+    <input type="file" id="file" accept=".xlsx,.csv,.json" hidden>
+    <div class="sec" style="margin-top:14px">補充歷史賽果(玩運彩)</div>
+    <div class="row" style="align-items:center;gap:6px;flex-wrap:wrap">
+      <input type="date" id="hFrom" style="flex:1;min-width:0;width:auto"> <span>~</span> <input type="date" id="hTo" style="flex:1;min-width:0;width:auto">
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn" id="hGo">抓取並併入資料庫</button>
+      <button class="btn line" id="hStop" style="display:none">停止</button>
+    </div>
+    <div class="hint" id="hMsg">選日期範圍後按鈕:逐日向玩運彩取已結算賽果與賠率,已有資料的日期會略過,重複場次不會重複加入。每 10 天自動存檔,中途停止或被限流也不會白做;完成後可按「下載新版 Excel」。需要設定頁的 Worker 網址。</div>
+    <div class="hint" id="swapMsg">支援與「足球2026_修正版.xlsx」相同欄位的 xlsx / csv(聯賽、比數、客隊、主隊、客賠率、和賠率、主賠率、小分賠率、時間、星期、日期)。資料只存在這支手機的瀏覽器裡,不會上傳。若有「日期時間來源」欄,標為「順序推算」的時間不會用在第 3 層。</div>
+  </div>
+
+  <div class="sec">推薦條件</div>
+  <div class="panel">
+    <div class="row" style="flex-wrap:nowrap"><div class="grow"><label class="f" style="margin-top:0">單場最低賠率</label><input id="sMinOdds" inputmode="decimal"></div><div class="grow"><label class="f" style="margin-top:0">單場最低機率</label><input id="sMinProb" inputmode="decimal"></div></div>
+    <div class="row" style="flex-wrap:nowrap"><div class="grow"><label class="f">最少串數</label><input id="sKMin" inputmode="numeric"></div><div class="grow"><label class="f">最多串數(≤8)</label><input id="sKMax" inputmode="numeric"></div><div class="grow"><label class="f">組合最低命中</label><input id="sMinJoint" inputmode="decimal"></div></div>
+    <label class="f">最低串數規則(每行「關鍵字=串數」,比對聯賽名或賽事編號)</label>
+    <textarea id="sRules" placeholder="世界盃=2&#10;友誼=3"></textarea>
+    <div class="hint">運彩有些賽事限制最低串數,網頁文字沒有統一格式,所以由你維護;每張賽事卡也能單獨設定。</div>
+    <div class="row" style="margin-top:10px"><button class="btn" id="sSave">儲存</button></div>
+  </div>
+
+  <div class="sec">自動更新(玩運彩)</div>
+  <div class="panel">
+    <div class="hint" style="margin-top:0">玩運彩的足球賠率(含運彩盤的客主和與小 2.5)寫在公開網頁裡。瀏覽器不允許 App 直接跨網站讀取,所以有兩種方式:書籤(Safari 就能用),或自己部署一個免費的 Cloudflare Worker 轉送(檔案在 proxy/worker.js)。</div>
+    <pre id="bmPS"></pre>
+    <div class="row" style="margin-top:8px"><button class="btn" id="bmPSCopy">複製玩運彩書籤</button></div>
+    <label class="f">Worker 網址(選填,填了就會在開啟 App 時自動更新)</label>
+    <input id="sProxy" placeholder="https://xxx.workers.dev/">
+    <div class="row" style="margin-top:8px"><button class="btn alt sm" id="sProxySave">儲存網址並更新</button></div>
+  </div>
+
+  <div class="sec">Gemini(AI 顧問,選填)</div>
+  <div class="panel">
+    <label class="f" style="margin-top:0">API 金鑰(免費,從 aistudio.google.com 取得)</label>
+    <input id="sGKey" type="password" autocomplete="off" placeholder="貼上你的金鑰">
+    <label class="f">模型(不寫死,由金鑰實際可用清單決定)</label>
+    <select id="sGModelSel"></select>
+    <label class="row" style="margin-top:10px;gap:8px"><input type="checkbox" id="sGSearch" style="width:auto"><span style="font-size:13.5px">用 Google 搜尋補充傷兵/陣容消息(較慢、較耗免費額度)</span></label>
+    <div class="row" style="margin-top:8px"><button class="btn alt sm" id="sGList">載入模型清單</button><button class="btn alt sm" id="sGTest">測試連線</button><button class="btn sm" id="sGSave">儲存</button><button class="btn line sm" id="sGClear">清除金鑰</button></div>
+    <div class="hint" id="sGMsg"></div>
+    <div class="hint">金鑰只存在這支手機的瀏覽器裡,只會送到 Google 的 API,不經過其他伺服器。送出的內容是賽事名稱、賠率與模型數字。免費額度有每分鐘與每日上限,超過時會顯示錯誤,稍後再試。</div>
+  </div>
+
+  <div class="sec">運彩官網書籤(備用)</div>
+  <details class="panel" style="padding:10px 14px"><summary style="cursor:pointer;font-size:13px;color:var(--mute)">展開(一般用不到,自動抓取已涵蓋)</summary>
+    <div class="hint" style="margin-top:0">在運彩「每日賽事 → 足球」頁面開這個書籤,會讀取畫面文字、自動切到明天再讀一次,全部複製到剪貼簿。它只讀你眼前的頁面,不會送出任何資料。</div>
+    <pre id="bm"></pre>
+    <div class="row" style="margin-top:8px"><button class="btn" id="bmCopy">複製抓取書籤</button></div>
+    <label class="f">先測試你的瀏覽器能不能執行書籤(開了應該跳出「書籤可以執行」)</label><pre id="bmTest">javascript:alert('書籤可以執行')</pre>
+    <div class="hint">手機瀏覽器不能直接貼上 javascript: 網址時:先把任一頁存成書籤,再把書籤的網址改成剛複製的內容。</div>
+  </details>
+</main>
+
+<nav id="nav">
+  <button type="button" class="on" data-t="matches"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 14h3M8 17h6"/></svg>賽事</button>
+  <button type="button" data-t="parlay"><svg viewBox="0 0 24 24"><path d="M4 8.5 12 4l8 4.5-8 4.5-8-4.5Z"/><path d="m4 12.5 8 4.5 8-4.5M4 16.5 12 21l8-4.5"/></svg>串關</button>
+  <button type="button" data-t="ai"><svg viewBox="0 0 24 24"><path d="M12 3.5l1.9 4.6 4.6 1.9-4.6 1.9L12 16.5l-1.9-4.6-4.6-1.9 4.6-1.9L12 3.5Z"/><path d="M18.5 15.5l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8.8-1.9Z"/></svg>顧問</button>
+  <button type="button" data-t="set"><svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>設定</button>
+</nav>
+
+<div id="errbar" style="display:none;position:fixed;left:8px;right:8px;top:8px;z-index:99;background:#b0746b;color:#fff;padding:8px 10px;border-radius:10px;font-size:12px;word-break:break-all"></div>
+<script>
+/* 底部導覽獨立於 app.js,即使主程式出錯也能切換頁籤;錯誤會顯示在畫面上方 */
+(function(){
+  var $=function(i){return document.getElementById(i)};
+  function err(m){var b=$('errbar');b.style.display='block';b.textContent='錯誤:'+m+'(請截圖回報)';}
+  window.addEventListener('error',function(e){err((e.message||'')+' @'+String(e.filename||'').split('/').pop()+':'+e.lineno)});
+  window.addEventListener('unhandledrejection',function(e){err(String(e.reason&&e.reason.message||e.reason))});
+  var btns=document.querySelectorAll('#nav button');
+  function go(t){
+    btns.forEach(function(x){x.classList.toggle('on',x.getAttribute('data-t')===t)});
+    ['matches','parlay','ai','set'].forEach(function(n){$('tab-'+n).style.display=n===t?'block':'none'});
+    $('days').style.display=t==='matches'?'grid':'none';
+    window.scrollTo(0,0);
+  }
+  btns.forEach(function(b){b.addEventListener('click',function(){go(b.getAttribute('data-t'))})});
+})();
+</script>
+<script src="engine.js?v=315"></script>
+<script src="parlay.js?v=315"></script>
+<script src="advisor.js?v=315"></script>
+<script src="importer.js?v=315"></script>
+<script src="dataload.js?v=315"></script>
+<script src="app.js?v=315"></script>
+</body>
+</html>
