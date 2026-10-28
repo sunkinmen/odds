@@ -365,7 +365,7 @@
   const bmPSSrc = 'javascript:(' + bmPS.toString().replace('__PWA__', location.origin + location.pathname).replace('__PARSE__', OHI.parsePS.toString().replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, ' ')).replace(/\s*\n\s*/g, ' ') + ')()';
   $('bmPS').textContent = bmPSSrc;
   $('bmPSCopy').onclick = () => navigator.clipboard.writeText(bmPSSrc).then(() => alert('已複製'), () => alert('請長按選取文字複製'));
-  let proxy = store.get('oh_proxy', '');
+  let proxy = store.get('oh_proxy', 'https://aged-frost-f068.sunkinmen.workers.dev/');
   $('sProxy').value = proxy;
   async function sync(auto) {
     if (!proxy) { if (!auto) { $('impMsg').textContent = '尚未設定 Worker 網址。請用玩運彩書籤,或到設定頁填入 Worker 網址。'; } return; }
