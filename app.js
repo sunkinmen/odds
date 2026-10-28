@@ -92,6 +92,15 @@
     }).join('');
   }
   const fmtSc = (an, k) => { const [s, w] = k.split('-'); return an.strongHome ? `客${w}：主${s}` : `客${s}：主${w}`; };
+  /* 價值解讀:打平線=1/賠率;樣本誤差用強隊同賠率層的場數估計 */
+  function valInfo(c, an) {
+    const L = an.layers && an.layers.L1, n = L ? L.c[0] + L.c[1] + L.c[2] : 0;
+    const be = 1 / c.odds, d = c.p - c.pm, se = n >= 5 ? 1.96 * Math.sqrt(c.p * (1 - c.p) / n) : 0.1;
+    const evTxt = c.ev >= 0 ? '高於本金,模型認為有利' : c.ev > -0.08 ? '小幅偏虧' : '偏虧';
+    const small = Math.abs(d) < se;
+    const edgeTxt = small ? `與市場差 ${(d * 100).toFixed(1)} 點,小於樣本誤差 ±${(se * 100).toFixed(0)} 點,視同持平` : `${d > 0 ? '高' : '低'}於市場 ${Math.abs(d * 100).toFixed(1)} 點(誤差約 ±${(se * 100).toFixed(0)})`;
+    return { be, d, se, evTxt, edgeTxt, small };
+  }
   function scoreBlock(an, m, pb) {
     const S = an.scoreSum; let h = '<div class="sc3"><h4>⑤ 綜整:最可能的三個比分</h4>';
     if (!S.top.length) h += '<div class="hint">四層都沒有可用樣本,無法統計比分。</div>';
@@ -100,17 +109,20 @@
       h += `<div class="hint">比分分布推得:強隊勝${pct(S.pRes[0])}・和${pct(S.pRes[1])}・負${pct(S.pRes[2])}${an.pu ? '' : ''}・總進球≤2 ${pct(S.pUnder)}(共 ${S.uniq} 種比分,單一比分占比通常不高,僅供參考)</div>`;
     }
     h += '<h4 style="margin-top:10px">挑選投注選項(點選加入「我的選注」)</h4>';
+    const bestC = pb.all.slice().sort((x, y) => y.ev - x.ev)[0];
     h += pb.all.map(c => {
       const on = m.pick === c.key, lab = c.key === 'U' ? '小分(總進球≤2)' : c.key === 'O' ? '大分(總進球≥3)' : c.key === 'O35' ? '大3.5(總進球≥4)' : c.key === 'O45' ? '大4.5(總進球≥5)' : `${c.side}(${c.side === '主' ? m.home : c.side === '客' ? m.away : '和局'})`;
-      return `<div class="opt ${on ? 'on' : ''} ${c.ev >= 0 ? 'pos' : ''}" data-k="${c.key}"><span><b>${lab}</b> @${c.odds}</span><span>機率 ${pct(c.p)} ・ <b class="ev">期望 ${(c.ev * 100).toFixed(0)}%</b></span><small>市場隱含 ${pct(c.pm)}${c.hist ? ` ・ 同區間歷史平均報酬 ${(c.hist.roi * 100).toFixed(0)}%` : ''}${on ? ' ・ 已加入' : ''}</small></div>`;
+      const v = valInfo(c, an), best = c === bestC;
+      return `<div class="opt ${on ? 'on' : ''} ${c.ev >= 0 ? 'pos' : ''}" data-k="${c.key}"><span><b>${lab}</b> @${c.odds}${best ? ' <em class="tag">水位後最划算</em>' : ''}</span><span>模型 ${pct(c.p)} <span class="s2">/ 打平線 ${pct(v.be)}</span></span><div class="vbar"><i class="be" style="left:${Math.min(100, v.be * 100)}%"></i><i class="pp" style="width:${Math.min(100, c.p * 100)}%"></i></div><small>每投 100 元平均拿回 <b class="ev">${(100 * (1 + c.ev)).toFixed(0)} 元</b>(${v.evTxt}) ・ 市場認為 ${pct(c.pm)},模型${v.edgeTxt}${c.hist ? ` ・ 同區間歷史報酬 ${(c.hist.roi * 100).toFixed(0)}%` : ''}${on ? ' ・ 已加入' : ''}</small></div>`;
     }).join('');
-    return h + '<div class="hint">期望值＝機率×賠率−1。回測顯示此估計沒有勝過市場,多數選項為負值,請當作歷史傾向而非保證。</div></div>';
+    return h + '<div class="hint">打平線＝1÷賠率(命中率要超過它才不虧);運彩抽水讓多數選項低於 100 元。比的是「哪個損失最小/優勢最明顯」,回測顯示模型沒有穩定勝過市場,請當作歷史傾向而非保證。</div></div>';
   }
   function ruleBlock(m, an, pb) {
     const it = OHA.makeItem(m, an, pb, { minOdds: cfg.minOdds, minLegOf });
     return `<div class="sc3"><h4>解讀(規則式)<span class="gr ${it.grade}" style="margin-left:6px">${it.grade}</span></h4>${it.reasons.map(r => `<div class="hint" style="margin:3px 0">・${esc(r)}</div>`).join('')}${it.warns.map(r => `<div class="hint" style="margin:3px 0;color:var(--clay)">⚠ ${esc(r)}</div>`).join('')}</div>`;
   }
-  function card(m) {
+  const MEDAL = [['gold', '金牌'], ['silver', '銀牌'], ['bronze', '銅牌']];
+  function card(m, medal) {
     const a = analyses.get(m.id); let cls = '', verdict = '', det = '';
     let hit = null;
     if (!db) verdict = '<span class="tag plain">等待資料庫…</span>';
@@ -133,17 +145,26 @@
     }
     const pk = hit && hit.market === '勝平負' ? hit.side : null, pu = hit && hit.key === 'U', po = hit && hit.key === 'O';
     const ex = (a && a.an.resolved.league) || '';
-    return `<article class="match ${cls}" data-id="${esc(m.id)}">
+    return `<article class="match ${cls}${medal != null ? ' medal ' + MEDAL[medal][0] : ''}" data-id="${esc(m.id)}">${medal != null ? `<span class="mbadge">${MEDAL[medal][1]} · 今日第 ${medal + 1} 名</span>` : ''}
       <div class="mt"><b>${esc(m.time || '--:--')}</b><span>${esc(SHORT(m.league || ex))}</span></div>
       <div><div class="teams">${esc(m.away)}<span class="at">@</span>${esc(m.home)}</div>
         <div class="odds"><div class="o ${pk === '客' ? 'hit' : ''}"><i>客</i>${m.oa}</div><div class="o ${pk === '和' ? 'hit' : ''}"><i>和</i>${m.od}</div><div class="o ${pk === '主' ? 'hit' : ''}"><i>主</i>${m.oh}</div>${m.ou ? `<div class="o u ${pu ? 'hit' : ''}"><i>小</i>${m.ou}</div>` : '<div></div>'}${m.ov ? `<div class="o u ${po ? 'hit' : ''}"><i>大</i>${m.ov}</div>` : '<div></div>'}</div>
         <div class="verdict">${verdict}</div></div>${det}</article>`;
   }
   const EMPTY = '<div class="empty"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M3.5 9.5h17"/></svg><div>這天還沒有賽事</div><div class="hint">用上方「貼上匯入 / 連線抓取 / 手動新增」加入運彩賽事</div></div>';
+  /* 當天最佳三場:先比規則評等 A>B>C,再比扣水後期望值;只有「有建議選項」的場次才有獎牌 */
+  function medalRank(list) {
+    const gr = { A: 0, B: 1, C: 2 }, arr = [];
+    list.forEach(m => { const a = analyses.get(m.id); if (!a || !a.pb.best) return; const it = OHA.makeItem(m, a.an, a.pb, { minOdds: cfg.minOdds, minLegOf }); arr.push({ id: m.id, g: gr[it.grade], ev: a.pb.best.ev }); });
+    arr.sort((x, y) => x.g - y.g || y.ev - x.ev);
+    return new Map(arr.slice(0, 3).map((x, i) => [x.id, i]));
+  }
   function render() {
     prune(); analyzeAll(); renderDays();
     const d = days()[activeDay], list = matches.filter(m => m.date === d).sort(byTime);
-    $('list').innerHTML = list.length ? list.map(card).join('') : EMPTY;
+    const medals = medalRank(list);
+    list.sort((x, y) => { const mx = medals.has(x.id) ? medals.get(x.id) : 9, my = medals.has(y.id) ? medals.get(y.id) : 9; return mx - my || byTime(x, y); });
+    $('list').innerHTML = list.length ? list.map(m => card(m, medals.get(m.id))).join('') : EMPTY;
     const other = matches.filter(m => !inDays(m)).length;
     $('skipMsg').textContent = other ? `另有 ${other} 場今明兩天以外的賽事已略過(後天的賽事通常還沒開賣)` : '';
     renderScope(); renderMine(); renderParlay();
@@ -401,11 +422,19 @@
     if (!prepare()) return;
     const btn = $('aiGem'); btn.disabled = true; $('aiOut').innerHTML = `<div class="hint">Gemini 分析中${gem.search ? '(含搜尋,約 20~60 秒)' : ''}…</div>`;
     try {
-      const rank = curItems.slice().sort((a, b) => (b.best ? b.best.ev : -9) - (a.best ? a.best.ev : -9));
-      const prompt = OHA.buildPrompt(rank, { budget, minOdds: cfg.minOdds, search: gem.search, SYSnames: SYSNAMES(), maxItems: 25 });
-      const plan = await OHA.callGemini(gem.key, gem.model, prompt, gem.search);
+      const gr = { A: 0, B: 1, C: 2 };
+      const rank = curItems.slice().sort((a, b) => (gr[a.grade] - gr[b.grade]) || ((b.best ? b.best.ev : -9) - (a.best ? a.best.ev : -9)));
+      const show = n => { $('aiOut').innerHTML = `<div class="hint">${n}</div>`; };
+      let plan, size = gem.search ? 10 : 14, lastErr;
+      for (let round = 0; round < 3 && !plan; round++) {
+        const prompt = OHA.buildPrompt(rank, { budget, minOdds: cfg.minOdds, search: gem.search, SYSnames: SYSNAMES(), maxItems: size, maxCands: 3 });
+        show(`Gemini 分析中(送出前 ${Math.min(size, rank.length)} 場,約 ${Math.round(prompt.length / 1000)}k 字)${gem.search ? ',含搜尋約 20~60 秒' : ''}…`);
+        try { plan = await OHA.callGemini(gem.key, gem.model, prompt, gem.search, null, { onRetry: (n, c) => show(`Gemini 忙線(${c}),第 ${n} 次重試…`) }); }
+        catch (e) { lastErr = e; if (e.code === 'cut' || e.code === 'timeout' || e.code === 'empty') { size = Math.max(4, Math.floor(size / 2)); continue; } throw e; }
+      }
+      if (!plan) throw lastErr;
       plan.src = 'ai'; setPlan(plan);
-    } catch (e) { $('aiOut').innerHTML = `<div class="hint">Gemini 失敗:${esc(e.message)}。${OHA.isModelGone(e.message) ? '模型可能已不可用:到「設定 → Gemini」按「載入模型清單」重新選擇,再儲存。' : '可能是金鑰錯誤或免費額度用完(稍後再試),也可先用規則方案。'}</div>`; }
+    } catch (e) { $('aiOut').innerHTML = `<div class="hint">Gemini 失敗:${esc(e.message)}。${OHA.isModelGone(e.message) ? '模型可能已不可用:到「設定 → Gemini」按「載入模型清單」重新選擇,再儲存。' : e.code === 'quota' ? '免費額度或每分鐘上限用完,等一分鐘再試。' : e.code === 'cut' || e.code === 'timeout' || e.code === 'empty' ? '已自動縮小資料量重試仍失敗,可在設定把「含搜尋」關閉再試。' : e.code === 'busy' ? 'Google 伺服器忙線,稍後再試。' : '可能是金鑰錯誤,也可先用規則方案。'}</div>`; }
     btn.disabled = false;
   };
   $('aiOut').addEventListener('click', e => {
