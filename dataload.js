@@ -7,10 +7,16 @@
 
   function range(d) { let lo = 1e9, hi = 0; for (const v of d) if (v > 0) { if (v < lo) lo = v; if (v > hi) hi = v; } const f = v => v ? `20${String(v).slice(0, 2)}-${String(v).slice(2, 4)}-${String(v).slice(4, 6)}` : '?'; return [f(lo), f(hi)]; }
   async function loadActive() {
-    try { const u = await idbGet('user'); if (u && u.data && u.data.n > 100) return { data: u.data, meta: u.meta, custom: true }; } catch (e) { }
+    let u = null; try { u = await idbGet('user'); } catch (e) { }
     const data = await (await fetch('data/matches.json')).json();
     const [from, to] = range(data.d);
-    return { data, meta: { name: BUILTIN_NAME, rows: data.n, from, to }, custom: false };
+    const built = { data, meta: { name: BUILTIN_NAME, rows: data.n, from, to }, custom: false };
+    if (u && u.data && u.data.n > 100) {
+      const auto = u.meta && u.meta.name === '足球資料庫(含玩運彩補充)';      // 由 App 自動補抓累積的資料
+      if (!auto || u.meta.to > to) return { data: u.data, meta: u.meta, custom: true };   // 手動匯入的永遠優先;自動補抓的只在比內建新時才用
+      try { await idbDel('user'); } catch (e) { }                                       // 內建已更新且涵蓋,捨棄舊的補抓快取
+    }
+    return built;
   }
   async function resetToBuiltin() { try { await idbDel('user'); } catch (e) { } }
 
