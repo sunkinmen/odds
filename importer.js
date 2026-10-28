@@ -131,9 +131,9 @@
       if (gi) { o.league = tx(gi.querySelector('p')); o.no = tx(gi.querySelector('h3')); o.tm = tx(gi.querySelector('h4')); }
       const t = tr.querySelector('.td-teaminfo');
       if (t) {
-        const sc = t.querySelectorAll('.scores li');
-        if (sc.length >= 3) {   // 已結算頁:巢狀表格,第一列客隊、最後一列主隊,比分在 .scores
-          const a = parseInt(sc[0].textContent), b = parseInt(sc[2].textContent); if (a >= 0 && b >= 0) o.sc = [a, b];
+        const sc = []; t.querySelectorAll('.scores li').forEach(function (li) { const s = tx(li); if (/^\d+$/.test(s)) sc.push(+s); });
+        if (sc.length >= 2) {   // 已結算頁(桌面/手機版版面不同):上列客隊、下列主隊,比分在 .scores li
+          o.sc = [sc[0], sc[sc.length - 1]];
           const nm = []; t.querySelectorAll('td').forEach(function (td) { if (!td.classList.contains('scores') && !td.classList.contains('teamgap') && !td.children.length && tx(td)) nm.push(tx(td)); });
           if (nm.length >= 2 && !o.teams.length) { o.teams.push(nm[0]); o.teams.push(nm[nm.length - 1]); }
         } else if (tx(t)) o.teams.push(tx(t));
