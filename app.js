@@ -179,8 +179,8 @@
   }
   const show = id => ['importBox', 'addBox', 'helpBox'].forEach(x => { const el = $(x); el.style.display = x === id && el.style.display === 'none' ? 'block' : 'none'; });
   $('bPaste').onclick = () => show('importBox'); $('bAdd').onclick = () => show('addBox');
-  $('bDo').onclick = () => { const a = OHI.parse($('txt').value, { today: today() }); if (a.length) { addMatches(a); $('txt').value = ''; } else $('impMsg').textContent = '解析不到任何賽事,請確認格式'; };
-  $('bClip').onclick = async () => { try { $('txt').value = await navigator.clipboard.readText(); $('bDo').click(); } catch (e) { $('impMsg').textContent = '無法讀取剪貼簿,請長按貼上'; } };
+  $('bDo').onclick = () => { const a = OHI.parse($('txt').value, { today: today() }); if (a.length) { addMatches(a); $('txt').value = ''; } else { const L = $('txt').value.split(/\n/).filter(x => x.trim()); $('impMsg').textContent = L.length ? `解析不到賽事。收到 ${L.length} 行,前 15 行:\n` + L.slice(0, 15).join(' | ') : '沒有內容可匯入(剪貼簿是空的,或書籤沒有執行)'; } };
+  $('bClip').onclick = async () => { try { $('txt').value = await navigator.clipboard.readText(); $('bDo').click(); } catch (e) { $('impMsg').textContent = '無法讀取剪貼簿,請在上方框內長按「貼上」後再按匯入'; } };
   $('bClear').onclick = () => { if (confirm('清空所有賽事?')) { matches = []; store.set('oh_matches', matches); render(); } };
   $('aSave').onclick = () => {
     const m = { id: 'M' + Date.now(), league: $('aLeague').value.trim(), home: $('aHome').value.trim(), away: $('aAway').value.trim(), oh: +$('aH').value, od: +$('aD').value, oa: +$('aA').value, ou: +$('aU').value || 0, minLeg: 0 };
@@ -198,22 +198,29 @@
   };
   fillCfg();
   function bm() {
-    (async () => {
-      const sleep = ms => new Promise(r => setTimeout(r, ms));
-      const txt = () => { const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), r = []; let n; while ((n = w.nextNode())) { const p = n.parentElement; if (!p || /^(SCRIPT|STYLE|NOSCRIPT)$/.test(p.tagName)) continue; const s = n.nodeValue.replace(/\s+/g, ' ').trim(); if (s) r.push(s); } return r.join('\n'); };
-      const root = () => document.scrollingElement || document.body;
-      const grab = async () => { let h = 0; for (let i = 0; i < 12; i++) { root().scrollTo(0, root().scrollHeight); await sleep(350); if (root().scrollHeight === h) break; h = root().scrollHeight; } root().scrollTo(0, 0); return txt(); };
-      const find = re => [...document.querySelectorAll('button,a,div,span,li,p')].filter(e => e.children.length <= 1 && re.test((e.innerText || '').trim()));
-      let out = await grab(), msg = '只抓到目前畫面(沒找到明天分頁)';
-      const nx = find(/^星期[一二三四五六日]\s*\d{1,2},\s*\d{1,2}$/)[0];
-      if (nx) { const before = out; nx.click(); for (let i = 0; i < 14; i++) { await sleep(500); if (i >= 2 && txt() !== before) break; } out += '\n' + await grab(); msg = '今天+明天'; const td = find(/^今天$/)[0]; if (td) td.click(); }
-      const done = () => alert('已複製(' + msg + '),回到賠率獵人按「貼上匯入」');
-      try { await navigator.clipboard.writeText(out); done(); } catch (e) {
-        const w = document.createElement('div'); w.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fff;padding:12px;display:flex;flex-direction:column;gap:8px';
-        const t = document.createElement('textarea'); t.value = out; t.style.cssText = 'flex:1;width:100%';
-        const b = document.createElement('button'); b.textContent = '複製並關閉'; b.style.cssText = 'padding:14px;font-size:16px';
-        b.onclick = () => { t.select(); document.execCommand('copy'); w.remove(); }; w.append(t, b); document.body.append(w);
-      }
+    var bar = document.createElement('div');
+    bar.style.cssText = 'position:fixed;left:8px;right:8px;top:8px;z-index:2147483647;background:#4f5f52;color:#fff;padding:10px 12px;border-radius:10px;font:14px sans-serif;word-break:break-all';
+    bar.textContent = '賠率獵人:抓取中…'; document.body.appendChild(bar);
+    var say = function (t, ms) { bar.textContent = t; if (ms) setTimeout(function () { bar.remove(); }, ms); };
+    (async function () {
+      try {
+        var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+        var txt = function () { var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), r = [], n; while ((n = w.nextNode())) { var p = n.parentElement; if (!p || /^(SCRIPT|STYLE|NOSCRIPT)$/.test(p.tagName) || p === bar) continue; var s = n.nodeValue.replace(/\s+/g, ' ').trim(); if (s) r.push(s); } return r.join('\n'); };
+        var root = function () { return document.scrollingElement || document.body; };
+        var grab = async function () { var h = 0; for (var i = 0; i < 12; i++) { root().scrollTo(0, root().scrollHeight); await sleep(350); if (root().scrollHeight === h) break; h = root().scrollHeight; } root().scrollTo(0, 0); return txt(); };
+        var find = function (re) { return Array.prototype.filter.call(document.querySelectorAll('button,a,div,span,li,p'), function (e) { return e.children.length <= 1 && re.test((e.innerText || '').trim()); }); };
+        var out = await grab(), msg = '只抓到目前畫面(沒找到明天分頁)';
+        var nx = find(/^星期[一二三四五六日]\s*\d{1,2},\s*\d{1,2}$/)[0];
+        if (nx) { var before = out; say('賠率獵人:切換到明天…'); nx.click(); for (var i = 0; i < 14; i++) { await sleep(500); if (i >= 2 && txt() !== before) break; } out += '\n' + await grab(); msg = '今天+明天'; var td = find(/^今天$/)[0]; if (td) td.click(); }
+        var lines = out.split('\n').length;
+        var manual = function () {
+          bar.remove(); var w = document.createElement('div'); w.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#fff;padding:12px;display:flex;flex-direction:column;gap:8px';
+          var t = document.createElement('textarea'); t.value = out; t.style.cssText = 'flex:1;width:100%;font-size:12px';
+          var b = document.createElement('button'); b.textContent = '複製全部並關閉(' + lines + ' 行)'; b.style.cssText = 'padding:14px;font-size:16px';
+          b.onclick = function () { t.select(); try { document.execCommand('copy'); } catch (e) { } w.remove(); }; w.appendChild(t); w.appendChild(b); document.body.appendChild(w);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) { try { await navigator.clipboard.writeText(out); say('已複製 ' + lines + ' 行(' + msg + '),回到賠率獵人按「貼上匯入」', 6000); } catch (e) { manual(); } } else manual();
+      } catch (e) { say('抓取失敗:' + (e && e.message)); }
     })();
   }
   const bmSrc = 'javascript:(' + bm.toString().replace(/\s*\n\s*/g, '') + ')()';

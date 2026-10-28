@@ -132,7 +132,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 <div class="top">
   <div class="brand">
     <div class="mark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
-    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.1</small></div>
+    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.2</small></div>
   </div>
   <div class="days" id="days"></div>
 </div>
@@ -167,7 +167,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
     </ol>
     <div class="hint">書籤打不開時:在運彩頁面直接全選並複製頁面文字(先看今天、再看明天各複製一次),貼到「貼上匯入」也能解析。每場賽事自帶日期,會自動分到今天/明天。列表頁沒有小分賠率,可在賽事卡展開後手動補填。</div>
   </div>
-  <div class="hint" id="impMsg"></div>
+  <div class="hint" id="impMsg" style="white-space:pre-wrap"></div>
   <details class="note"><summary>⚠ 先看回測結論</summary><p>用 2022–2023 預測 2025(6,000 場):相近賠率的歷史結果,並沒有比「直接選熱門」更準,長期 ROI 約 −15%;莊家抽水約 22%。這裡給的是歷史傾向,不是穩贏保證,請控制金額。</p></details>
   <div id="list"></div>
   <div class="hint" id="skipMsg" style="text-align:center"></div>
@@ -208,6 +208,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
     <div class="hint" style="margin-top:0">在運彩「每日賽事 → 足球」頁面開這個書籤,會讀取畫面文字、自動切到明天再讀一次,全部複製到剪貼簿。它只讀你眼前的頁面,不會送出任何資料。</div>
     <pre id="bm"></pre>
     <div class="row" style="margin-top:8px"><button class="btn" id="bmCopy">複製抓取書籤</button></div>
+    <label class="f">先測試你的瀏覽器能不能執行書籤(開了應該跳出「書籤可以執行」)</label><pre id="bmTest">javascript:alert('書籤可以執行')</pre>
     <div class="hint">手機瀏覽器不能直接貼上 javascript: 網址時:先把任一頁存成書籤,再把書籤的網址改成剛複製的內容。</div>
   </div>
 </main>
@@ -236,10 +237,10 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
   btns.forEach(function(b){b.addEventListener('click',function(){go(b.getAttribute('data-t'))})});
 })();
 </script>
-<script src="engine.js?v=31"></script>
-<script src="parlay.js?v=31"></script>
-<script src="importer.js?v=31"></script>
-<script src="dataload.js?v=31"></script>
-<script src="app.js?v=31"></script>
+<script src="engine.js?v=32"></script>
+<script src="parlay.js?v=32"></script>
+<script src="importer.js?v=32"></script>
+<script src="dataload.js?v=32"></script>
+<script src="app.js?v=32"></script>
 </body>
 </html>
