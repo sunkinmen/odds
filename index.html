@@ -71,6 +71,7 @@ details.note p{margin:8px 2px 0;line-height:1.6;color:var(--ink)}
 .match.silver .mbadge{color:#2b2f34}.match.bronze .mbadge{color:#fff4e8}
 @keyframes mshine{0%{background-position:0 0,0% 50%}100%{background-position:0 0,300% 50%}}
 @media (prefers-reduced-motion:reduce){.match.medal,.mbadge{animation:none}}
+.sortbar{display:flex;align-items:center;gap:6px;margin:10px 2px 0;font-size:12.5px;color:var(--mute)}.sortbar button{border:1px solid var(--line);background:var(--paper);color:var(--ink,inherit);border-radius:999px;padding:5px 14px;font-size:13px}.sortbar button.on{background:var(--deep);color:#fff;border-color:var(--deep)}.mt .rk{display:block;margin-top:6px;font-style:normal;font-size:11px;font-weight:700;color:var(--mute)}
 .match::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--rail,var(--line))}
 .match.pick{--rail:var(--sage)}.match.skip{--rail:var(--clay)}.match.flag{--rail:var(--sand)}
 .mt{padding-left:16px;text-align:left}
@@ -160,7 +161,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 <div class="top">
   <div class="brand">
     <div class="mark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
-    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.17</small></div>
+    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.18</small></div>
   </div>
   <div class="days" id="days"></div>
 </div>
@@ -199,6 +200,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
   </div>
   <div class="hint" id="impMsg" style="white-space:pre-wrap"></div>
   <details class="note"><summary>⚠ 先看回測結論</summary><p>用 2022–2023 預測 2025(6,000 場):相近賠率的歷史結果,並沒有比「直接選熱門」更準,長期 ROI 約 −15%;莊家抽水約 22%。這裡給的是歷史傾向,不是穩贏保證,請控制金額。</p></details>
+  <div class="sortbar" id="sortBar"><span>排序</span><button data-m="best">最佳</button><button data-m="high">高賠</button></div>
   <div id="list"></div>
   <div class="hint" id="skipMsg" style="text-align:center"></div>
 </main>
@@ -315,11 +317,11 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
   btns.forEach(function(b){b.addEventListener('click',function(){go(b.getAttribute('data-t'))})});
 })();
 </script>
-<script src="engine.js?v=317"></script>
-<script src="parlay.js?v=317"></script>
-<script src="advisor.js?v=317"></script>
-<script src="importer.js?v=317"></script>
-<script src="dataload.js?v=317"></script>
-<script src="app.js?v=317"></script>
+<script src="engine.js?v=318"></script>
+<script src="parlay.js?v=318"></script>
+<script src="advisor.js?v=318"></script>
+<script src="importer.js?v=318"></script>
+<script src="dataload.js?v=318"></script>
+<script src="app.js?v=318"></script>
 </body>
 </html>
