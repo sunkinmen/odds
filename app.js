@@ -33,13 +33,16 @@
   const byTime = (a, b) => (a.date + (a.time || '99:99')).localeCompare(b.date + (b.time || '99:99'));
 
   // ---------- 資料庫 ----------
+  const SNAPS = store.get('oh_snaps', {});
+  let afText = '', afBusy = false, resIdx = null;
   let curData = null;
   function useDb(r) {
-    curData = r.data; db = OH.load(r.data);
+    curData = r.data; resIdx = null; db = OH.load(r.data);
     $('dbstat').textContent = `${db.n.toLocaleString()} 場歷史資料 · ${r.custom ? '自訂' : '內建'}`;
     $('dbName').textContent = r.meta.name + (r.meta.at ? `(${r.meta.at} 匯入)` : '');
     $('dbRows').textContent = r.meta.rows.toLocaleString(); $('dbFrom').textContent = r.meta.from.slice(2); $('dbTo').textContent = r.meta.to.slice(2);
-    render();
+    render(); try { renderLog(); } catch (e) { }
+    if (!window.__af) { window.__af = 1; setTimeout(() => autoFill(), 1500); }
   }
   OHD.loadActive().then(useDb).catch(e => { $('dbstat').textContent = '歷史資料載入失敗,請重新整理'; console.error(e); });
   $('bSwap').onclick = () => $('file').click();
@@ -132,7 +135,7 @@
       if (b) {
         cls = 'pick';
         verdict = `<span class="tag">建議 ${(b.key === 'U' ? '小分' : b.key === 'O' ? '大分' : b.side)} @${b.odds}</span><span class="meter" title="機率 vs 市場"><i style="width:${b.p * 100}%"></i><b style="left:${b.pm * 100}%"></b></span><span>${pct(b.p)}</span>`;
-        verdict += `<span class="tag plain">期望 ${(b.ev * 100).toFixed(0)}%</span>`; if (b.hist) verdict += `<span class="tag plain" title="歷史上同市場同賠率區間每注平均報酬">同區間歷史 ${(b.hist.roi * 100).toFixed(0)}%</span>`;
+        verdict += `<span class="tag plain">期望 ${(b.ev * 100).toFixed(0)}%</span>`; { const mv = OHT.movement(SNAPS, m, b.key); if (mv) verdict += `<span class="mv ${mv.pct < 0 ? 'dn' : 'up'}" title="賠率變動:${mv.open} → ${mv.now}(共 ${mv.n} 次紀錄)。賠率下降代表市場資金看好該選項">${mv.pct < 0 ? '▼' : '▲'}${mv.open}→${mv.now}</span>`; } if (b.hist) verdict += `<span class="tag plain" title="歷史上同市場同賠率區間每注平均報酬">同區間歷史 ${(b.hist.roi * 100).toFixed(0)}%</span>`;
         if (minLegOf(m) > 1) verdict += `<span class="tag plain">${minLegOf(m)}串起</span>`;
       } else { cls = 'skip'; verdict = `<span class="tag skip">不推薦・沒有賠率≥${cfg.minOdds}且機率≥${pct(cfg.minProb)}的選項</span>`; }
       (an.tail || []).filter(t => t.flag).forEach(t => { verdict += `<span class="tag flag" title="比分分布與大小盤估算">高比分 大${t.line} 偏高 ${pct(t.p)}(市場${pct(t.pm)}) @${t.odds}</span>`; });
@@ -275,6 +278,7 @@
       const i = matches.findIndex(x => x.date === m.date && ((x.id === m.id && x.home === m.home) || (x.home === m.home && x.away === m.away)));
       if (i >= 0) { m.minLeg = m.minLeg || matches[i].minLeg; if (!m.ou && matches[i].ou) m.ou = matches[i].ou; if (!m.ov && matches[i].ov) m.ov = matches[i].ov; if (matches[i].pick) { m.pick = matches[i].pick; m.inc = matches[i].inc; } matches[i] = m; } else { matches.push(m); added++; }
     });
+    try { if (OHT.record(SNAPS, arr.filter(m => m.date >= t), Date.now())) store.set('oh_snaps', SNAPS); } catch (e) { }
     store.set('oh_matches', matches); render();
     $('impMsg').textContent = `匯入 ${arr.length - drop} 場(新增 ${added})${drop ? `,略過已過期 ${drop} 場` : ''}`;
   }
@@ -452,13 +456,14 @@
   $('aiOut').addEventListener('click', e => {
     if (e.target.id !== 'planAdopt' || !curPlan) return;
     const p = curPlan, pid = 'P' + Date.now(), ts = Date.now(), st = planStats(p);
-    const ent = (kind, id, k, stake) => { const i = itOf(id), c = candOf(id, k); return { uid: pid + id + k + kind, pid, kind, id, date: i.date, label: i.label, k, odds: c.odds, p: c.p, ev: c.ev, stake, src: p.src, ts, hit: null }; };
+    const ent = (kind, id, k, stake) => { const i = itOf(id), c = candOf(id, k); return { uid: pid + id + k + kind, pid, kind, id, date: i.date, label: i.label, home: i.home, away: i.away, grade: i.grade, kick: OHT.kickMs(i.date, i.time), k, odds: c.odds, p: c.p, ev: c.ev, stake, src: p.src, ts, hit: null }; };
     p.singles.forEach(s => LOG.push(ent('單場', s.id, s.k, s.stake)));
     if (p.parlay) { p.parlay.legs.forEach(l => LOG.push(ent('串關腿', l.id, l.k, 0))); PLANS.push({ pid, src: p.src, type: p.parlay.type, stakePer: p.parlay.stakePer, legs: p.parlay.legs.map(l => ({ id: l.id, k: l.k, odds: candOf(l.id, l.k).odds, p: candOf(l.id, l.k).p, minLeg: itOf(l.id).minLeg || 1 })), ts, date: (itOf(p.parlay.legs[0].id) || {}).date, ret: null, cost: st.pr.cost }); }
     settle(); saveLog(); renderLog(); e.target.disabled = true; e.target.textContent = '已記錄';
   });
   // 結算:有比分的場次判定輸贏
   function settle() {
+    if (curData && LOG.some(x => x.hit == null && !SCORES[x.id])) { if (!resIdx) resIdx = OHT.resultIndex(curData); if (OHT.autoSettle(LOG, SCORES, resIdx)) saveLog(); }
     LOG.forEach(x => { const s = SCORES[x.id]; if (s && x.hit == null) x.hit = OHA.judge(x.k, s[0], s[1]); });
     PLANS.forEach(pl => {
       if (pl.ret != null) return; if (!pl.legs.every(l => SCORES[l.id])) return;
@@ -476,6 +481,7 @@
     const row = (t, s) => `<div class="pl"><span style="white-space:nowrap">${t}</span><b>${s.done ? `${s.hits}/${s.done} 中(${pct(s.hitRate)})・模型預期 ${pct(s.expHit)}・平均每注報酬 ${(s.roi * 100).toFixed(0)}%(預期 ${(s.expRoi * 100).toFixed(0)}%)` : `${s.n} 筆待結算`}</b></div>`;
     h += `<div class="plan"><h4>推薦成績(各 1 單位平注)</h4>${row('全部', A)}${row('規則方案', S(x => x.src === 'rule'))}${row('Gemini 方案', S(x => x.src === 'ai'))}${row('單場', S(x => x.kind === '單場'))}</div>`;
     const dp = PLANS.filter(p => p.ret != null), cost = dp.reduce((t, p) => t + p.cost, 0), ret = dp.reduce((t, p) => t + p.ret, 0);
+    h = (afText ? `<div class="hint" style="margin-top:0">${esc(afText)}</div>` : '') + OHT.dashHtml(OHT.dash(LOG, SNAPS)) + h;
     h += `<div class="plan"><h4>系統串關實際損益</h4><div class="rs">${dp.length ? `${dp.length} 組已結算:投入 ${cost.toLocaleString()} 元,回收 ${Math.round(ret).toLocaleString()} 元,報酬 ${((ret / cost - 1) * 100).toFixed(0)}%` : '尚無已結算的串關'}</div></div>`;
     h += `<div class="hint">樣本少時(幾十筆以內)命中率與報酬的隨機波動很大,不能據此判斷 AI 有沒有用。至少累積 100 筆以上再看,並比較「實際」與「模型預期」。</div>`;
     h += `<div class="row" style="margin-top:8px"><button class="btn line sm" id="logClr">清除紀錄</button></div>`;
@@ -603,6 +609,40 @@
       $('hGo').disabled = false; $('hStop').style.display = 'none';
     };
   })();
+
+  // ---------- 自動補資料:啟動時補抓缺少的已結算賽果(供自動結算/校準用) ----------
+  async function autoFill() {
+    if (afBusy || !curData) return; const base = (proxy || '').trim(); if (!base) return;
+    const last = store.get('oh_autofill', 0); if (Date.now() - last < 6 * 36e5) return;
+    const yd = new Date(new Date(today() + 'T00:00:00Z').getTime() - 864e5).toISOString().slice(0, 10);
+    const have = OHD.haveDates(curData), empty = new Set(store.get('oh_empty', []));
+    const toInt = d => (+d.slice(0, 4) - 2000) * 10000 + +d.slice(5, 7) * 100 + +d.slice(8, 10);
+    let mx = 0; have.forEach(v => { if (v > mx) mx = v; });
+    const from = mx ? new Date(Date.UTC(2000 + Math.floor(mx / 10000), Math.floor(mx / 100) % 100 - 1, mx % 100) + 864e5).toISOString().slice(0, 10) : yd;
+    const miss = d => !have.has(toInt(d)) && !empty.has(d);
+    const pend = [...new Set(LOG.filter(x => x.hit == null && x.date && x.date <= yd).map(x => x.date))].filter(miss);
+    const gap = []; for (let d = new Date(from + 'T00:00:00Z'); d.toISOString().slice(0, 10) <= yd; d = new Date(d.getTime() + 864e5)) { const k = d.toISOString().slice(0, 10); if (miss(k) && !pend.includes(k)) gap.push(k); }
+    const todo = pend.concat(gap).slice(0, 25);
+    if (!todo.length) { store.set('oh_autofill', Date.now()); return; }
+    afBusy = true; let buf = [], added = 0, i = 0, stopped = '';
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    try {
+      for (const d of todo) {
+        afText = `自動補資料 ${i + 1}/${todo.length}(${d})…`; renderLog();
+        const r = await fetch(base + (base.includes('?') ? '&' : '?') + 'd=' + d.replace(/-/g, ''));
+        if (r.status === 429 || r.status >= 500) { stopped = '代理被限流,稍後會再試'; break; }
+        if (!r.ok) { stopped = 'HTTP ' + r.status; break; }
+        const rows = OHI.fromPlaysport(await r.text(), d.replace(/-/g, '')).filter(x => x[11]);
+        if (!rows.length) empty.add(d); buf = buf.concat(rows); i++;
+        await sleep(1200);
+      }
+      if (buf.length) { const r = await OHD.appendHistory(curData, buf); added = r.added; useDb(r); }
+      store.set('oh_empty', [...empty].slice(-400));
+      if (!stopped) store.set('oh_autofill', Date.now());
+      afText = `自動補資料:處理 ${i} 天,新增 ${added} 場已結算賽事${stopped ? '(' + stopped + ')' : ''}`;
+    } catch (e) { afText = '自動補資料中斷:' + (e.message || e); }
+    afBusy = false; renderLog();
+  }
 
   // ---------- 書籤自動回傳(網址 #oh=...) ----------
   function importHash() {
