@@ -122,7 +122,7 @@
     return `<div class="sc3"><h4>解讀(規則式)<span class="gr ${it.grade}" style="margin-left:6px">${it.grade}</span></h4>${it.reasons.map(r => `<div class="hint" style="margin:3px 0">・${esc(r)}</div>`).join('')}${it.warns.map(r => `<div class="hint" style="margin:3px 0;color:var(--clay)">⚠ ${esc(r)}</div>`).join('')}</div>`;
   }
   const MEDAL = [['gold', '金牌'], ['silver', '銀牌'], ['bronze', '銅牌']];
-  function card(m, medal) {
+  function card(m, medal, rank, hp) {
     const a = analyses.get(m.id); let cls = '', verdict = '', det = '';
     let hit = null;
     if (!db) verdict = '<span class="tag plain">等待資料庫…</span>';
@@ -146,29 +146,41 @@
     const pk = hit && hit.market === '勝平負' ? hit.side : null, pu = hit && hit.key === 'U', po = hit && hit.key === 'O';
     const ex = (a && a.an.resolved.league) || '';
     return `<article class="match ${cls}${medal != null ? ' medal ' + MEDAL[medal][0] : ''}" data-id="${esc(m.id)}">${medal != null ? `<span class="mbadge">${MEDAL[medal][1]} · 今日第 ${medal + 1} 名</span>` : ''}
-      <div class="mt"><b>${esc(m.time || '--:--')}</b><span>${esc(SHORT(m.league || ex))}</span></div>
+      <div class="mt"><b>${esc(m.time || '--:--')}</b><span>${esc(SHORT(m.league || ex))}</span>${rank != null ? `<i class="rk">#${rank + 1}</i>` : ''}</div>
       <div><div class="teams">${esc(m.away)}<span class="at">@</span>${esc(m.home)}</div>
         <div class="odds"><div class="o ${pk === '客' ? 'hit' : ''}"><i>客</i>${m.oa}</div><div class="o ${pk === '和' ? 'hit' : ''}"><i>和</i>${m.od}</div><div class="o ${pk === '主' ? 'hit' : ''}"><i>主</i>${m.oh}</div>${m.ou ? `<div class="o u ${pu ? 'hit' : ''}"><i>小</i>${m.ou}</div>` : '<div></div>'}${m.ov ? `<div class="o u ${po ? 'hit' : ''}"><i>大</i>${m.ov}</div>` : '<div></div>'}</div>
-        <div class="verdict">${verdict}</div></div>${det}</article>`;
+        <div class="verdict">${hp ? `<span class="tag">高賠首選 ${hp.key === 'U' ? '小分' : hp.key === 'O' ? '大分' : hp.side} @${hp.odds}・機率 ${pct(hp.p)}</span>` : ''}${verdict}</div></div>${det}</article>`;
   }
   const EMPTY = '<div class="empty"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M3.5 9.5h17"/></svg><div>這天還沒有賽事</div><div class="hint">用上方「貼上匯入 / 連線抓取 / 手動新增」加入運彩賽事</div></div>';
-  /* 當天最佳三場:先比規則評等 A>B>C,再比扣水後期望值;只有「有建議選項」的場次才有獎牌 */
-  function medalRank(list) {
-    const gr = { A: 0, B: 1, C: 2 }, arr = [];
-    list.forEach(m => { const a = analyses.get(m.id); if (!a || !a.pb.best) return; const it = OHA.makeItem(m, a.an, a.pb, { minOdds: cfg.minOdds, minLegOf }); arr.push({ id: m.id, g: gr[it.grade], ev: a.pb.best.ev }); });
-    arr.sort((x, y) => x.g - y.g || y.ev - x.ev);
-    return new Map(arr.slice(0, 3).map((x, i) => [x.id, i]));
+  /* 排序:最佳=規則評等 A>B>C 再比扣水後期望值(前三名拿金銀銅);高賠=在達到最低賠率與機率的選項中,賠率最高者優先,同賠率比機率。沒有可建議選項的場次排在最後,依開賽時間。 */
+  let sortMode = store.get('oh_sort', 'best');
+  function highPick(a) { const ok = a.pb.all.filter(c => c.odds >= cfg.minOdds && c.p >= cfg.minProb).sort((x, y) => y.odds - x.odds || y.p - x.p); return ok[0] || null; }
+  function orderList(list) {
+    const gr = { A: 0, B: 1, C: 2 }, keyed = [], rest = [], info = new Map();
+    list.forEach(m => {
+      const a = analyses.get(m.id); let s = null;
+      if (a) {
+        if (sortMode === 'high') { const h = highPick(a); if (h) { s = [-h.odds, -h.p]; info.set(m.id, h); } }
+        else if (a.pb.best) { const it = OHA.makeItem(m, a.an, a.pb, { minOdds: cfg.minOdds, minLegOf }); s = [gr[it.grade], -a.pb.best.ev]; }
+      }
+      (s ? keyed : rest).push({ m, s });
+    });
+    keyed.sort((x, y) => x.s[0] - y.s[0] || x.s[1] - y.s[1] || byTime(x.m, y.m));
+    rest.sort((x, y) => byTime(x.m, y.m));
+    const ranks = new Map(); keyed.forEach((x, i) => ranks.set(x.m.id, i));
+    return { list: keyed.concat(rest).map(x => x.m), ranks, info };
   }
   function render() {
     prune(); analyzeAll(); renderDays();
-    const d = days()[activeDay], list = matches.filter(m => m.date === d).sort(byTime);
-    const medals = medalRank(list);
-    list.sort((x, y) => { const mx = medals.has(x.id) ? medals.get(x.id) : 9, my = medals.has(y.id) ? medals.get(y.id) : 9; return mx - my || byTime(x, y); });
-    $('list').innerHTML = list.length ? list.map(m => card(m, medals.get(m.id))).join('') : EMPTY;
+    const d = days()[activeDay]; let list = matches.filter(m => m.date === d).sort(byTime);
+    const od = orderList(list); list = od.list;
+    document.querySelectorAll('#sortBar button').forEach(b => b.classList.toggle('on', b.dataset.m === sortMode));
+    $('list').innerHTML = list.length ? list.map(m => { const r = od.ranks.get(m.id); return card(m, sortMode === 'best' && r != null && r < 3 ? r : null, r, od.info.get(m.id)); }).join('') : EMPTY;
     const other = matches.filter(m => !inDays(m)).length;
     $('skipMsg').textContent = other ? `另有 ${other} 場今明兩天以外的賽事已略過(後天的賽事通常還沒開賣)` : '';
     renderScope(); renderMine(); renderParlay();
   }
+  $('sortBar').onclick = e => { const b = e.target.closest('button'); if (!b) return; sortMode = b.dataset.m; store.set('oh_sort', sortMode); render(); };
   $('list').addEventListener('click', e => {
     const c = e.target.closest('.match'); if (!c) return; const id = c.dataset.id;
     if (e.target.classList.contains('del')) { matches = matches.filter(x => x.id !== id); store.set('oh_matches', matches); render(); return; }
