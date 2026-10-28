@@ -115,7 +115,7 @@
       const v = valInfo(c, an), best = c === bestC;
       return `<div class="opt ${on ? 'on' : ''} ${c.ev >= 0 ? 'pos' : ''}" data-k="${c.key}"><span><b>${lab}</b> @${c.odds}${best ? ' <em class="tag">水位後最划算</em>' : ''}</span><span>模型 ${pct(c.p)} <span class="s2">/ 打平線 ${pct(v.be)}</span></span><div class="vbar"><i class="be" style="left:${Math.min(100, v.be * 100)}%"></i><i class="pp" style="width:${Math.min(100, c.p * 100)}%"></i></div><small>每投 100 元平均拿回 <b class="ev">${(100 * (1 + c.ev)).toFixed(0)} 元</b>(${v.evTxt}) ・ 市場認為 ${pct(c.pm)},模型${v.edgeTxt}${c.hist ? ` ・ 同區間歷史報酬 ${(c.hist.roi * 100).toFixed(0)}%` : ''}${on ? ' ・ 已加入' : ''}</small></div>`;
     }).join('');
-    return h + '<div class="hint">打平線＝1÷賠率(命中率要超過它才不虧);運彩抽水讓多數選項低於 100 元。比的是「哪個損失最小/優勢最明顯」,回測顯示模型沒有穩定勝過市場,請當作歷史傾向而非保證。</div></div>';
+    return h + '<div class="hint">打平線＝1÷賠率(命中率要超過它才不虧);運彩抽水(約 23%)讓多數選項低於 100 元。模型機率已用機器學習校準(2026 樣本外比單純看賠率準,但準確度提升不等於會賺)。比的是「哪個損失最小/優勢最明顯」,回測顯示模型沒有穩定勝過市場,請當作歷史傾向而非保證。</div></div>';
   }
   function ruleBlock(m, an, pb) {
     const it = OHA.makeItem(m, an, pb, { minOdds: cfg.minOdds, minLegOf });
