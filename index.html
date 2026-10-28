@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#4f5f52">
+<meta name="theme-color" content="#0b0b0b">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>賠率獵人</title>
 <style>
 :root{
@@ -151,7 +151,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 <div class="top">
   <div class="brand">
     <div class="mark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
-    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.11</small></div>
+    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.12</small></div>
   </div>
   <div class="days" id="days"></div>
 </div>
@@ -224,8 +224,18 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
     <div class="row" style="margin-top:10px">
       <button class="btn" id="bSwap">更換資料</button>
       <button class="btn line" id="bReset">還原內建</button>
+      <button class="btn alt" id="bExport">下載新版 Excel</button>
     </div>
     <input type="file" id="file" accept=".xlsx,.csv,.json" hidden>
+    <div class="sec" style="margin-top:14px">補充歷史賽果(玩運彩)</div>
+    <div class="row" style="align-items:center;gap:6px;flex-wrap:wrap">
+      <input type="date" id="hFrom" style="flex:1;min-width:0;width:auto"> <span>~</span> <input type="date" id="hTo" style="flex:1;min-width:0;width:auto">
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn" id="hGo">抓取並併入資料庫</button>
+      <button class="btn line" id="hStop" style="display:none">停止</button>
+    </div>
+    <div class="hint" id="hMsg">選日期範圍後按鈕:逐日向玩運彩取已結算賽果與賠率,已有資料的日期會略過,重複場次不會重複加入。每 10 天自動存檔,中途停止或被限流也不會白做;完成後可按「下載新版 Excel」。需要設定頁的 Worker 網址。</div>
     <div class="hint" id="swapMsg">支援與「足球2026_修正版.xlsx」相同欄位的 xlsx / csv(聯賽、比數、客隊、主隊、客賠率、和賠率、主賠率、小分賠率、時間、星期、日期)。資料只存在這支手機的瀏覽器裡,不會上傳。若有「日期時間來源」欄,標為「順序推算」的時間不會用在第 3 層。</div>
   </div>
 
@@ -296,11 +306,11 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
   btns.forEach(function(b){b.addEventListener('click',function(){go(b.getAttribute('data-t'))})});
 })();
 </script>
-<script src="engine.js?v=311"></script>
-<script src="parlay.js?v=311"></script>
-<script src="advisor.js?v=311"></script>
-<script src="importer.js?v=311"></script>
-<script src="dataload.js?v=311"></script>
-<script src="app.js?v=311"></script>
+<script src="engine.js?v=312"></script>
+<script src="parlay.js?v=312"></script>
+<script src="advisor.js?v=312"></script>
+<script src="importer.js?v=312"></script>
+<script src="dataload.js?v=312"></script>
+<script src="app.js?v=312"></script>
 </body>
 </html>

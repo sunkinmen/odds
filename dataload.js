@@ -71,6 +71,47 @@
     await idbSet('user', { data, meta });
     return { data, meta, custom: true };
   }
-  root.OHD = { loadActive, importFile, resetToBuiltin, pack };
+  /* 匯出目前資料庫為 xlsx(欄位與原檔相同的前 11 欄) */
+  function toAoa(data) {
+    const WD = ['週一', '週二', '週三', '週四', '週五', '週六', '週日'], out = [['聯賽', '比數', '客隊', '主隊', '客賠率', '和賠率', '主賠率', '小分賠率', '時間', '星期', '日期']];
+    const o = v => v > 0 ? v / 100 : null;
+    for (let i = 0; i < data.n; i++) {
+      const t = data.t[i], mins = t >= 0 ? t * 5 : -1, hh = Math.floor(mins / 60);
+      out.push([data.leagues[data.l[i]], `${data.ga[i]} V.S. ${data.gh[i]}`, data.teams[data.a[i]], data.teams[data.h[i]], o(data.oa[i]), o(data.od[i]), o(data.oh[i]), o(data.ou[i]),
+        mins >= 0 ? `${hh >= 12 ? 'PM' : 'AM'} ${String(hh % 12 || 12).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}` : null, data.w[i] < 7 ? WD[data.w[i]] : null, data.d[i] > 0 ? 20000000 + data.d[i] : null]);
+    }
+    return out;
+  }
+  async function exportXlsx(data) {
+    await loadScript('lib/xlsx.mini.min.js');
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(toAoa(data)), '2025');
+    const d = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' }).replace(/-/g, '');
+    XLSX.writeFile(wb, `足球資料庫_${d}.xlsx`);
+  }
+  /* 把玩運彩已結算賽事(OHI.parsePS 回傳列,第 12 欄為比分)併入資料庫並存到 IndexedDB;以 日期+主隊+客隊 去重 */
+  async function appendHistory(data, rows) {
+    const tm = new Map(data.teams.map((v, i) => [v, i])), lm = new Map(data.leagues.map((v, i) => [v, i]));
+    const id = (m, arr, k) => { let v = m.get(k); if (v === undefined) { v = arr.length; arr.push(k); m.set(k, v); } return v; };
+    const seen = new Set(); for (let i = 0; i < data.n; i++) seen.add(data.d[i] + '|' + data.h[i] + '|' + data.a[i]);
+    let added = 0;
+    rows.forEach(r => {
+      const sc = r[11]; if (!sc) return;
+      const m = String(r[7]).match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/); if (!m) return;
+      const d = (+m[1] - 2000) * 10000 + +m[2] * 100 + +m[3];
+      const h = id(tm, data.teams, nt(r[3])), a = id(tm, data.teams, nt(r[1]));
+      const key = d + '|' + h + '|' + a; if (seen.has(key)) return; seen.add(key);
+      const mins = +m[4] * 60 + +m[5], wd = (new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay() + 6) % 7;
+      data.l.push(id(lm, data.leagues, nt(r[8]))); data.a.push(a); data.h.push(h); data.ga.push(sc[0]); data.gh.push(sc[1]);
+      data.oa.push(Math.round(r[2] * 100)); data.od.push(Math.round(r[5] * 100)); data.oh.push(Math.round(r[4] * 100));
+      data.ou.push(r[6] > 1 ? Math.round(r[6] * 100) : 0); data.d.push(d); data.w.push(wd); data.t.push(Math.floor(mins / 5)); added++;
+    });
+    data.n = data.h.length;
+    const [from, to] = range(data.d);
+    const meta = { name: '足球資料庫(含玩運彩補充)', rows: data.n, from, to, at: new Date().toISOString().slice(0, 16).replace('T', ' ') };
+    await idbSet('user', { data, meta });
+    return { data, meta, custom: true, added };
+  }
+  const haveDates = data => { const s = new Set(); for (let i = 0; i < data.n; i++) s.add(data.d[i]); return s; };
+  root.OHD = { appendHistory, haveDates, loadActive, importFile, resetToBuiltin, pack, exportXlsx, toAoa };
   if (typeof module !== 'undefined') module.exports = { pack };
 })(typeof self !== 'undefined' ? self : this);

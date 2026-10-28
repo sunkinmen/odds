@@ -33,8 +33,9 @@
   const byTime = (a, b) => (a.date + (a.time || '99:99')).localeCompare(b.date + (b.time || '99:99'));
 
   // ---------- 資料庫 ----------
+  let curData = null;
   function useDb(r) {
-    db = OH.load(r.data);
+    curData = r.data; db = OH.load(r.data);
     $('dbstat').textContent = `${db.n.toLocaleString()} 場歷史資料 · ${r.custom ? '自訂' : '內建'}`;
     $('dbName').textContent = r.meta.name + (r.meta.at ? `(${r.meta.at} 匯入)` : '');
     $('dbRows').textContent = r.meta.rows.toLocaleString(); $('dbFrom').textContent = r.meta.from.slice(2); $('dbTo').textContent = r.meta.to.slice(2);
@@ -49,6 +50,7 @@
     catch (err) { $('swapMsg').textContent = '更換失敗:' + err.message; }
     e.target.value = '';
   };
+  $('bExport').onclick = async () => { if (!curData) return; $('swapMsg').textContent = '產生 Excel 中…(約 8 萬列,請稍候)'; try { await OHD.exportXlsx(curData); $('swapMsg').textContent = '已下載:欄位同原檔前 11 欄(聯賽~日期)'; } catch (e) { $('swapMsg').textContent = '匯出失敗:' + e.message; } };
   $('bReset').onclick = async () => { await OHD.resetToBuiltin(); useDb(await OHD.loadActive()); $('swapMsg').textContent = '已還原為內建資料'; };
 
   // ---------- 最低串數 ----------
@@ -516,6 +518,50 @@
   }
   $('bSync').onclick = () => sync(false);
   $('sProxySave').onclick = () => { proxy = $('sProxy').value.trim(); store.set('oh_proxy', proxy); sync(false); };
+
+  // ---------- 補充歷史賽果 ----------
+  (function () {
+    const tp = today(); const y = new Date(new Date(tp + 'T00:00:00Z').getTime() - 864e5).toISOString().slice(0, 10);
+    $('hFrom').value = store.get('oh_hfrom', '2026-01-01'); $('hTo').value = y; $('hTo').max = y;
+    let stop = false;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    $('hStop').onclick = () => { stop = true; $('hMsg').textContent += '(停止中…)'; };
+    $('hGo').onclick = async () => {
+      if (!curData) return; const base = (proxy || '').trim();
+      if (!base) { $('hMsg').textContent = '請先在設定頁填入 Worker 網址'; return; }
+      const f = $('hFrom').value, t = $('hTo').value; if (!f || !t || f > t) { $('hMsg').textContent = '日期範圍不正確'; return; }
+      store.set('oh_hfrom', f);
+      const list = []; for (let d = new Date(f + 'T00:00:00Z'); d <= new Date(t + 'T00:00:00Z'); d = new Date(d.getTime() + 864e5)) list.push(d.toISOString().slice(0, 10));
+      if (list.length > 400) { $('hMsg').textContent = '一次最多 400 天,請縮小範圍'; return; }
+      const have = OHD.haveDates(curData);
+      const todo = list.filter(d => !have.has((+d.slice(0, 4) - 2000) * 10000 + +d.slice(5, 7) * 100 + +d.slice(8, 10)));
+      stop = false; $('hGo').disabled = true; $('hStop').style.display = '';
+      let buf = [], added = 0, done = 0, empty = 0, fail = 0;
+      const flush = async () => { if (!buf.length) return; const r = await OHD.appendHistory(curData, buf); buf = []; added += r.added; useDb(r); };
+      try {
+        for (const d of todo) {
+          if (stop) break;
+          $('hMsg').textContent = `抓取中 ${done}/${todo.length}(略過已有資料 ${list.length - todo.length} 天)· 目前 ${d} · 新增 ${added} 場`;
+          let ok = false;
+          for (let k = 0; k < 4 && !ok && !stop; k++) {
+            try {
+              const r = await fetch(base + (base.includes('?') ? '&' : '?') + 'd=' + d.replace(/-/g, ''));
+              if (r.status === 429 || r.status >= 500) { $('hMsg').textContent = `被限流(HTTP ${r.status}),等待 70 秒後重試… ${d}`; await sleep(70000); continue; }
+              if (!r.ok) throw new Error('HTTP ' + r.status);
+              const rows = OHI.fromPlaysport(await r.text(), d.replace(/-/g, '')).filter(x => x[11]);
+              if (!rows.length) empty++; buf = buf.concat(rows); ok = true;
+            } catch (e) { await sleep(3000); }
+          }
+          if (!ok) fail++;
+          done++; if (done % 10 === 0) await flush();
+          await sleep(1200);
+        }
+        await flush();
+        $('hMsg').textContent = `${stop ? '已停止' : '完成'}:處理 ${done} 天,新增 ${added} 場${empty ? `,${empty} 天沒有已結算賽事` : ''}${fail ? `,${fail} 天失敗(再按一次會補抓)` : ''}。資料庫現有 ${curData.n.toLocaleString()} 場。`;
+      } catch (e) { $('hMsg').textContent = '中斷:' + e.message; }
+      $('hGo').disabled = false; $('hStop').style.display = 'none';
+    };
+  })();
 
   // ---------- 書籤自動回傳(網址 #oh=...) ----------
   function importHash() {

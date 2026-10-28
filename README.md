@@ -2,6 +2,7 @@
 
 靜態網站(無後端),把整個資料夾丟到 Cloudflare Pages / GitHub Pages / Netlify 即可,手機開網址後「加入主畫面」。
 - `data/matches.json`:由「足球2026_修正版.xlsx」轉出的內建預設資料(6.4 萬場,壓縮後約 650KB,第一次載入後可離線使用)
+- 補充歷史賽果:設定頁選日期範圍,App 經 Worker 逐日抓玩運彩已結算賽果併入資料庫(存手機瀏覽器內),可再「下載新版 Excel」。
 - 更換資料:設定頁「更換資料」選新的 xlsx/csv(欄位同修正版),存在手機瀏覽器內;「還原內建」可回到預設。`lib/xlsx.mini.min.js` 是解析 xlsx 用的套件
 - `engine.js`:四層比對引擎;`parlay.js`:串關推薦;`importer.js`:匯入解析
 

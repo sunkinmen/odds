@@ -121,7 +121,7 @@
     }
   }
   /* 玩運彩「預測比例」頁(足球 運彩盤)解析。自成一體,可直接 toString 放進書籤。
-   * doc: 頁面 DOM;gt: 'YYYYMMDD'。回傳 [賽事編號, 客隊, 客賠, 主隊, 主賠, 和賠, 小分(2.5)賠, 'YYYY-MM-DD HH:MM', 聯賽, 大分(2.5)賠, {'3.5':[大,小],'4.5':[大,小]}] */
+   * doc: 頁面 DOM;gt: 'YYYYMMDD'。回傳 [賽事編號, 客隊, 客賠, 主隊, 主賠, 和賠, 小分(2.5)賠, 'YYYY-MM-DD HH:MM', 聯賽, 大分(2.5)賠, {'3.5':[大,小],'4.5':[大,小]}, [客分,主分]|null(已結算頁才有)] */
   function parsePS(doc, gt) {
     const g = {}, order = [], tx = e => e ? e.textContent.replace(/\s+/g, ' ').trim() : '';
     doc.querySelectorAll('tr[gameid]').forEach(function (tr) {
@@ -129,7 +129,15 @@
       if (!o) { o = g[id] = { teams: [], od: {}, ou: 0, ov: 0, ln: {} }; order.push(id); }
       const gi = tr.querySelector('.td-gameinfo');
       if (gi) { o.league = tx(gi.querySelector('p')); o.no = tx(gi.querySelector('h3')); o.tm = tx(gi.querySelector('h4')); }
-      const t = tr.querySelector('.td-teaminfo'); if (t && tx(t)) o.teams.push(tx(t));
+      const t = tr.querySelector('.td-teaminfo');
+      if (t) {
+        const sc = t.querySelectorAll('.scores li');
+        if (sc.length >= 3) {   // 已結算頁:巢狀表格,第一列客隊、最後一列主隊,比分在 .scores
+          const a = parseInt(sc[0].textContent), b = parseInt(sc[2].textContent); if (a >= 0 && b >= 0) o.sc = [a, b];
+          const nm = []; t.querySelectorAll('td').forEach(function (td) { if (!td.classList.contains('scores') && !td.classList.contains('teamgap') && !td.children.length && tx(td)) nm.push(tx(td)); });
+          if (nm.length >= 2 && !o.teams.length) { o.teams.push(nm[0]); o.teams.push(nm[nm.length - 1]); }
+        } else if (tx(t)) o.teams.push(tx(t));
+      }
       tr.querySelectorAll('.td-bank-bet01,.td-bank-bet03').forEach(function (td) { const v = parseFloat(tx(td.querySelector('.data-wrap span'))); if (v > 1) o.od[tx(td.querySelector('.team-side'))] = v; });
       tr.querySelectorAll('.td-bank-bet02').forEach(function (td) {
         const side = tx(td.querySelector('.team-side')), line = tx(td.querySelector('.data-wrap strong')), v = parseFloat(tx(td.querySelector('.data-wrap span')).replace(/[^\d.]/g, ''));
@@ -143,7 +151,7 @@
       const o = g[id], m = (o.tm || '').match(/([AP])M\s*(\d+):(\d+)/);
       if (o.teams.length < 2 || !(o.od['客'] > 1 && o.od['主'] > 1 && o.od['和'] > 1)) return;
       const hh = m ? (+m[2] === 12 ? 0 : +m[2]) + (m[1] === 'P' ? 12 : 0) : 0;
-      out.push([id, o.teams[0], o.od['客'], o.teams[1], o.od['主'], o.od['和'], o.ou, d + ' ' + String(hh).padStart(2, '0') + ':' + (m ? m[3] : '00'), o.league || '', o.ov, o.ln]);
+      out.push([id, o.teams[0], o.od['客'], o.teams[1], o.od['主'], o.od['和'], o.ou, d + ' ' + String(hh).padStart(2, '0') + ':' + (m ? m[3] : '00'), o.league || '', o.ov, o.ln, o.sc || null]);
     });
     return out;
   }
