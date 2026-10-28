@@ -4,8 +4,9 @@
     get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
   };
-  const DEF = { minOdds: 1.3, minProb: 0.5, kMin: 2, kMax: 4, minJoint: 0.12, rules: '' };
+  const DEF = { ver: 2, minOdds: 1.6, minProb: 0.4, kMin: 2, kMax: 4, minJoint: 0.08, rules: '' };
   let cfg = Object.assign({}, DEF, store.get('oh_cfg', {}));
+  if (cfg.ver !== 2) { cfg.ver = 2; cfg.minOdds = DEF.minOdds; cfg.minProb = DEF.minProb; cfg.minJoint = DEF.minJoint; store.set('oh_cfg', cfg); }
   let matches = store.get('oh_matches', []);
   let db = null, sortBy = 'ev', analyses = new Map();
   let activeDay = store.get('oh_day', 0);       // 0 今天 1 明天
@@ -63,7 +64,7 @@
   function analyzeAll() {
     analyses.clear(); if (!db) return;
     matches.forEach(m => {
-      try { const an = OH.analyze(db, m); analyses.set(m.id, { an, pb: OH.pickBest(an, m, cfg.minOdds) }); } catch (e) { console.warn(e); }
+      try { const an = OH.analyze(db, m); analyses.set(m.id, { an, pb: OH.pickBest(an, m, cfg.minOdds, cfg.minProb, db) }); } catch (e) { console.warn(e); }
     });
   }
 
@@ -88,22 +89,37 @@
       return `<div class="lay"><span>${names[k]} <span class="lg">勝${f(0).toFixed(0)}・和${f(1).toFixed(0)}・負${f(2).toFixed(0)}</span></span><span class="n">${n}場</span><div class="sb"><i class="w" style="width:${f(0)}%"></i><i class="d" style="width:${f(1)}%"></i><i class="l" style="width:${f(2)}%"></i></div></div>`;
     }).join('');
   }
+  const fmtSc = (an, k) => { const [s, w] = k.split('-'); return an.strongHome ? `客${w}：主${s}` : `客${s}：主${w}`; };
+  function scoreBlock(an, m, pb) {
+    const S = an.scoreSum; let h = '<div class="sc3"><h4>⑤ 綜整:最可能的三個比分</h4>';
+    if (!S.top.length) h += '<div class="hint">四層都沒有可用樣本,無法統計比分。</div>';
+    else {
+      h += S.top.map(x => `<div class="scr"><b>${fmtSc(an, x.key)}</b><div class="bar"><i style="width:${Math.min(100, x.p * 100 * 3)}%"></i></div><span>${(x.p * 100).toFixed(0)}%</span><small>出現 ${x.cnt} 次 ・ 母數 ${S.n} 場(四層合計,樣本互有重疊)</small></div>`).join('');
+      h += `<div class="hint">比分分布推得:強隊勝${pct(S.pRes[0])}・和${pct(S.pRes[1])}・負${pct(S.pRes[2])}${an.pu ? '' : ''}・總進球≤2 ${pct(S.pUnder)}(共 ${S.uniq} 種比分,單一比分占比通常不高,僅供參考)</div>`;
+    }
+    h += '<h4 style="margin-top:10px">挑選投注選項(點選加入「我的選注」)</h4>';
+    h += pb.all.map(c => {
+      const on = m.pick === c.key, lab = c.market === '小分' ? '小分(總進球≤2)' : `${c.side}(${c.side === '主' ? m.home : c.side === '客' ? m.away : '和局'})`;
+      return `<div class="opt ${on ? 'on' : ''} ${c.ev >= 0 ? 'pos' : ''}" data-k="${c.key}"><span><b>${lab}</b> @${c.odds}</span><span>機率 ${pct(c.p)} ・ <b class="ev">期望 ${(c.ev * 100).toFixed(0)}%</b></span><small>市場隱含 ${pct(c.pm)}${c.hist ? ` ・ 同區間歷史平均報酬 ${(c.hist.roi * 100).toFixed(0)}%` : ''}${on ? ' ・ 已加入' : ''}</small></div>`;
+    }).join('');
+    return h + '<div class="hint">期望值＝機率×賠率−1。回測顯示此估計沒有勝過市場,多數選項為負值,請當作歷史傾向而非保證。</div></div>';
+  }
   function card(m) {
     const a = analyses.get(m.id); let cls = '', verdict = '', det = '';
     let hit = null;
     if (!db) verdict = '<span class="tag plain">等待資料庫…</span>';
     else if (a) {
-      const { an, pb } = a, b = pb.best && pb.best.p >= cfg.minProb ? pb.best : null; hit = b;
+      const { an, pb } = a, b = pb.best; hit = b;
       const unk = [an.resolved.home, an.resolved.away].some(x => x.id < 0);
       if (b) {
         cls = 'pick';
         verdict = `<span class="tag">建議 ${b.market === '小分' ? '小分' : b.side} @${b.odds}</span><span class="meter" title="機率 vs 市場"><i style="width:${b.p * 100}%"></i><b style="left:${b.pm * 100}%"></b></span><span>${pct(b.p)}</span>`;
-        if (b.ev < 0) verdict += `<span class="tag plain">期望 ${(b.ev * 100).toFixed(0)}%</span>`;
+        verdict += `<span class="tag plain">期望 ${(b.ev * 100).toFixed(0)}%</span>`; if (b.hist) verdict += `<span class="tag plain" title="歷史上同市場同賠率區間每注平均報酬">同區間歷史 ${(b.hist.roi * 100).toFixed(0)}%</span>`;
         if (minLegOf(m) > 1) verdict += `<span class="tag plain">${minLegOf(m)}串起</span>`;
-      } else { cls = 'skip'; verdict = '<span class="tag skip">不推薦・賠率過低或無合格選項</span>'; }
+      } else { cls = 'skip'; verdict = `<span class="tag skip">不推薦・沒有賠率≥${cfg.minOdds}且機率≥${pct(cfg.minProb)}的選項</span>`; }
       if (an.anomaly.flag) { if (!b) cls = 'flag'; verdict += `<span class="tag flag">罕見組合 ${an.anomaly.n}場 ${pct(Math.max(...an.anomaly.c) / an.anomaly.n)}同向(${an.toHDA(an.anomaly.pick)})</span>`; }
       if (unk) verdict += '<span class="tag plain">部分隊名查無歷史</span>';
-      det = `<div class="det"><div class="lg" style="margin-top:8px">強隊:${esc(an.strongName)} ・ 合併機率 勝${pct(an.p[0])} 和${pct(an.p[1])} 負${pct(an.p[2])}${an.pu ? ` ・ 小分${pct(an.pu.p)}` : ''}</div>${layerBlock(an)}
+      det = `<div class="det"><div class="lg" style="margin-top:8px">強隊:${esc(an.strongName)} ・ 合併機率 勝${pct(an.p[0])} 和${pct(an.p[1])} 負${pct(an.p[2])}${an.pu ? ` ・ 小分${pct(an.pu.p)}` : ''}</div>${layerBlock(an)}${scoreBlock(an, m, pb)}
         <div class="lg2"><span><s style="background:var(--sage)"></s>強隊勝</span><span><s style="background:var(--sand)"></s>和</span><span><s style="background:var(--clay)"></s>強隊負</span></div>
         <div class="hint">罕見組合檢查:相同賠率(±3%)共 ${an.anomaly.n} 場${an.anomaly.n ? `,涉及這兩隊 ${pct(an.anomaly.teamShare)}` : ''}。回測中此訊號沒有優於選熱門。</div>
         <div class="row" style="margin:8px 0 2px"><span class="hint" style="margin:0">小分賠率</span><input class="ou-in" inputmode="decimal" style="width:80px;padding:6px 10px" value="${m.ou || ''}" placeholder="選填"><span class="hint" style="margin:0 0 0 6px">最低串數</span><select class="ml" style="width:auto;padding:6px 10px">${[0, 2, 3, 4, 5].map(v => `<option value="${v}" ${(m.minLeg || 0) === v ? 'selected' : ''}>${v ? v + ' 串起' : '依規則'}</option>`).join('')}</select><span class="grow"></span><button class="btn line sm del">刪除</button></div></div>`;
@@ -123,12 +139,15 @@
     $('list').innerHTML = list.length ? list.map(card).join('') : EMPTY;
     const other = matches.filter(m => !inDays(m)).length;
     $('skipMsg').textContent = other ? `另有 ${other} 場今明兩天以外的賽事已略過(後天的賽事通常還沒開賣)` : '';
-    renderScope(); renderParlay();
+    renderScope(); renderMine(); renderParlay();
   }
   $('list').addEventListener('click', e => {
     const c = e.target.closest('.match'); if (!c) return; const id = c.dataset.id;
     if (e.target.classList.contains('del')) { matches = matches.filter(x => x.id !== id); store.set('oh_matches', matches); render(); return; }
     if (e.target.closest('select,input')) return;
+    const op = e.target.closest('.opt');
+    if (op) { const m = matches.find(x => x.id === id); m.pick = m.pick === op.dataset.k ? '' : op.dataset.k; if (m.pick) m.inc = true; store.set('oh_matches', matches); const was = c.classList.contains('open'); render(); if (was) { const n = document.querySelector(`.match[data-id="${CSS.escape(id)}"]`); if (n) n.classList.add('open'); } return; }
+    if (e.target.closest('.det')) return;
     c.classList.toggle('open');
   });
   $('list').addEventListener('change', e => {
@@ -142,12 +161,12 @@
     const ds = days(), opts = [['0', `今天 ${md(ds[0])}`], ['1', `明天 ${md(ds[1])}`], ['both', '今明兩天']];
     $('scope').innerHTML = opts.map(([v, t]) => `<button class="chp ${String(scope) === v ? 'on' : ''}" data-v="${v}">${t}</button>`).join('');
   }
-  $('scope').onclick = e => { const b = e.target.closest('.chp'); if (!b) return; scope = b.dataset.v; store.set('oh_scope', scope); renderScope(); renderParlay(); };
+  $('scope').onclick = e => { const b = e.target.closest('.chp'); if (!b) return; scope = b.dataset.v; store.set('oh_scope', scope); renderScope(); renderMine(); renderParlay(); };
   function renderParlay() {
     if (!db) return;
     const legs = [], inScope = scoped();
     inScope.forEach(m => {
-      const a = analyses.get(m.id); if (!a || !a.pb.best || a.pb.best.p < cfg.minProb) return; const b = a.pb.best;
+      const a = analyses.get(m.id); if (!a || !a.pb.best) return; const b = a.pb.best;
       legs.push({ id: m.id, label: `${m.away} @ ${m.home}`, pick: b.market === '小分' ? '小分' : b.side, tm: `${md(m.date)} ${m.time || ''}`, odds: b.odds, p: b.p, minLeg: minLegOf(m) });
     });
     const r = OHP.recommend(legs, { ...cfg, sortBy });
@@ -158,6 +177,47 @@
       <div class="ft"><span class="tag ${p.ev < 0 ? 'skip' : ''}">期望 ${(p.ev * 100).toFixed(0)}%</span><span class="tag plain">每 100 元約回 ${(100 * p.p * p.odds).toFixed(0)} 元</span></div></div>`).join('') +
       `<div class="hint" style="text-align:center;margin:12px 6px">期望值 = 命中機率 × 總賠率 − 1,幾乎都是負值,只用來比較組合之間的相對好壞。</div>`;
   }
+  // ---------- 我的選注・系統串關 ----------
+  let sysType = store.get('oh_sys', ''), stake = store.get('oh_stake', 100);
+  function myLegs() {
+    const out = [];
+    scoped().sort(byTime).forEach(m => {
+      if (!m.pick) return; const a = analyses.get(m.id); if (!a) return; const c = a.pb.all.find(x => x.key === m.pick); if (!c) return;
+      out.push({ id: m.id, m, label: `${m.away} @ ${m.home}`, pick: c.market === '小分' ? '小分' : c.side, odds: c.odds, p: c.p, minLeg: minLegOf(m), inc: m.inc !== false });
+    });
+    return out;
+  }
+  function renderMine() {
+    const el = $('mine'); if (!db) { el.innerHTML = ''; return; }
+    const all = myLegs();
+    if (!all.length) { el.innerHTML = '<div class="hint" style="margin:0">尚未選注。到「賽事」頁展開賽事卡,在「挑選投注選項」點選要串的選項;或'+'<button class="btn sm alt" id="mAuto">自動帶入各場最佳選項</button></div>'; return; }
+    const legs = all.filter(l => l.inc), N = legs.length;
+    let h = all.map((l, i) => `<div class="mleg"><input type="checkbox" data-id="${esc(l.id)}" ${l.inc ? 'checked' : ''}><label>${esc(l.label)}<div class="tm hint" style="margin:0">${esc(l.m.time || '')} ・ ${l.pick} @${l.odds} ・ 機率${pct(l.p)}${l.minLeg > 1 ? ` ・ ${l.minLeg}串起` : ''}</div></label><button class="btn line sm" data-rm="${esc(l.id)}">移除</button></div>`).join('');
+    h += `<div class="row" style="margin-top:10px"><span class="hint" style="margin:0">已勾選 ${N} 場</span><span class="grow"></span><button class="btn sm line" id="mClr">全部清除</button><button class="btn sm alt" id="mAuto">自動帶入</button></div>`;
+    if (N < 2) { el.innerHTML = h + '<div class="hint">至少勾選 2 場才能串關。</div>'; return; }
+    if (N > 8) { el.innerHTML = h + '<div class="hint">系統串關最多 8 場,請取消部分勾選。</div>'; return; }
+    const types = OHP.SYS[N] || [];
+    if (!types.some(t => t[0] === sysType)) sysType = types[0][0];
+    h += `<div class="hint" style="margin-top:12px">${N} 場常見串關(點選直接計算)</div><div class="tbtn">${types.map(t => `<button class="chp ${t[0] === sysType ? 'on' : ''}" data-t="${t[0]}">${t[0]}</button>`).join('')}</div>`;
+    const sizes = types.find(t => t[0] === sysType)[1], r = OHP.calcSystem(legs, sizes, stake);
+    const M = sysType.split('串'), x = sysType.replace('串', 'x');
+    h += `<div class="row" style="margin-top:6px"><span class="hint" style="margin:0">每注金額</span><input id="stk" inputmode="numeric" style="width:90px;padding:6px 10px" value="${stake}"><span class="hint" style="margin:0">元(共 ${r.bets} 注)</span></div>
+      <div class="kv"><span>${sysType}(${x}):${sizes.map(k => k + '串1').join('＋')}</span><b>${r.bets} 注</b><span>投注總額</span><b>${r.cost.toLocaleString()} 元</b><span>全部命中時回收</span><b>${Math.round(r.maxRet).toLocaleString()} 元</b><span>至少中一注的機率</span><b>${pct(r.pAny)}</b><span>回本(回收≥投注)機率</span><b>${pct(r.pBreak)}</b><span>期望回收(模型)</span><b>${Math.round(r.expRet).toLocaleString()} 元</b><span>期望值</span><b style="color:${r.ev < 0 ? 'var(--clay)' : 'var(--deep)'}">${(r.ev * 100).toFixed(0)}%</b></div>`;
+    if (r.bad) h += `<div class="hint">有 ${r.bad} 個組合因含「${Math.max(...legs.map(l => l.minLeg))}串起」的賽事而不合規,已排除不計。</div>`;
+    if (!r.bets) h += '<div class="hint">此型態沒有合規組合,請換一種或調整最低串數。</div>';
+    h += '<div class="hint">假設各場獨立、機率取自模型;期望值多為負,系統串關只是降低「全中才有」的門檻,並不會提高期望值。</div>';
+    el.innerHTML = h;
+  }
+  $('mine').addEventListener('click', e => {
+    const t = e.target.closest('[data-t]'); if (t) { sysType = t.dataset.t; store.set('oh_sys', sysType); renderMine(); return; }
+    const rm = e.target.closest('[data-rm]'); if (rm) { const m = matches.find(x => x.id === rm.dataset.rm); if (m) m.pick = ''; store.set('oh_matches', matches); render(); return; }
+    if (e.target.id === 'mClr') { scoped().forEach(m => m.pick = ''); store.set('oh_matches', matches); render(); return; }
+    if (e.target.id === 'mAuto') { scoped().forEach(m => { const a = analyses.get(m.id); if (a && a.pb.best) { m.pick = a.pb.best.key; m.inc = true; } }); store.set('oh_matches', matches); render(); }
+  });
+  $('mine').addEventListener('change', e => {
+    if (e.target.type === 'checkbox') { const m = matches.find(x => x.id === e.target.dataset.id); if (m) m.inc = e.target.checked; store.set('oh_matches', matches); renderMine(); }
+    if (e.target.id === 'stk') { stake = Math.max(1, +e.target.value || 100); store.set('oh_stake', stake); renderMine(); }
+  });
   const setSort = s => { sortBy = s; $('sEv').classList.toggle('on', s === 'ev'); $('sP').classList.toggle('on', s === 'p'); renderParlay(); };
   $('sEv').onclick = () => setSort('ev'); $('sP').onclick = () => setSort('p');
 
@@ -198,6 +258,7 @@
   };
   fillCfg();
   function bm() {
+    var PWA = '__PWA__';
     var bar = document.createElement('div');
     bar.style.cssText = 'position:fixed;left:8px;right:8px;top:8px;z-index:2147483647;background:#4f5f52;color:#fff;padding:10px 12px;border-radius:10px;font:14px/1.5 sans-serif;word-break:break-all';
     bar.textContent = '賠率獵人:抓取中…'; document.body.appendChild(bar);
@@ -251,6 +312,7 @@
         var hasRows = got.length > 0 || /\d{1,2}\s*\d{1,2}\s*月/.test(out) && (out.match(/\b\d{1,3}\.\d{2}\b/g) || []).length >= 6;
         if (!hasRows) {
           bar.remove(); var w = document.createElement('div'); w.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#fff;color:#222;padding:14px;overflow:auto;font:14px/1.6 sans-serif';
+          if (frames.length === 1) { say('賽事表在框架裡,正在開啟…開啟後請再按一次書籤'); setTimeout(function () { location.href = frames[0]; }, 1200); return; }
           var h = '<b>這一層頁面沒有賽事</b><div style="margin:6px 0">共 ' + out.split('\n').length + ' 行文字;內嵌框架 ' + frames.length + ' 個;shadow 節點 ' + shadows + ' 個。</div>';
           if (frames.length) { h += '<div>賽事表在另一個網頁框架裡,書籤不能直接讀取。請點下面的網址在此分頁開啟,<b>開啟後再按一次書籤</b>:</div>'; frames.forEach(function (u) { h += '<p style="word-break:break-all"><a href="' + u.replace(/"/g, '&quot;') + '" target="_top" style="color:#06c">' + u.replace(/</g, '&lt;') + '</a></p>'; }); }
           h += '<div style="margin-top:10px"><button id="ohx" style="padding:12px 16px;font-size:15px">關閉</button> <button id="ohc" style="padding:12px 16px;font-size:15px">複製這份報告</button></div>';
@@ -263,6 +325,7 @@
         var msg = '只抓到目前畫面(沒找到明天分頁)';
         var nx = find(/^星期[一二三四五六日]\s*\d{1,2},\s*\d{1,2}$/)[0];
         if (nx) { var before = out; say('賠率獵人:切換到明天…'); nx.click(); for (var i = 0; i < 14; i++) { await sleep(500); if (i >= 2 && txt() !== before) break; } out += '\n' + await grab(); got = merge(got, scan()); msg = '今天+明天'; var td = find(/^今天$/)[0]; if (td) td.click(); }
+        if (got.length && PWA) { var pl = btoa(unescape(encodeURIComponent(JSON.stringify(got.map(function (m) { return [m.matchId, m.awayTeam, m.oddsAway, m.homeTeam, m.oddsHome, m.oddsDraw, m.oddsUnder, m.matchDate]; }))))); say('已抓到 ' + got.length + ' 場,正在回到賠率獵人…'); try { navigator.clipboard.writeText(JSON.stringify(got)); } catch (e) { } location.href = PWA + '#oh=' + pl.replace(/\+/g, '-').replace(/\//g, '_'); return; }
         if (got.length) { out = JSON.stringify(got); msg += ',' + got.length + ' 場'; }
         var lines = got.length || out.split('\n').length;
         var manual = function () {
@@ -275,10 +338,23 @@
       } catch (e) { say('抓取失敗:' + (e && e.message)); }
     })();
   }
-  const bmSrc = 'javascript:(' + bm.toString().replace(/\s*\n\s*/g, '') + ')()';
+  const bmSrc = 'javascript:(' + bm.toString().replace('__PWA__', location.origin + location.pathname).replace(/\s*\n\s*/g, '') + ')()';
   $('bm').textContent = bmSrc;
   $('bmCopy').onclick = () => navigator.clipboard.writeText(bmSrc).then(() => alert('已複製'), () => alert('請長按選取文字複製'));
 
+  // ---------- 書籤自動回傳(網址 #oh=...) ----------
+  function importHash() {
+    const m = location.hash.match(/^#oh=(.+)$/); if (!m) return;
+    try {
+      const j = decodeURIComponent(escape(atob(m[1].replace(/-/g, '+').replace(/_/g, '/'))));
+      const arr = JSON.parse(j).map(r => ({ matchId: r[0], awayTeam: r[1], oddsAway: r[2], homeTeam: r[3], oddsHome: r[4], oddsDraw: r[5], oddsUnder: r[6], matchDate: r[7] }));
+      activeDay = 0; store.set('oh_day', 0);
+      addMatches(OHI.fromExtension(arr));
+    } catch (e) { $('impMsg').textContent = '自動匯入失敗:' + e.message; }
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+  window.addEventListener('hashchange', importHash);
+
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });
-  render();
+  render(); importHash();
 })();

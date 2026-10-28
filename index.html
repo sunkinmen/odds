@@ -125,6 +125,18 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 .stat b{display:block;font-size:17px;font-variant-numeric:tabular-nums}
 .stat span{font-size:11px;color:var(--mute)}
 .pos{color:var(--sage)}.neg{color:var(--clay)}
+.sc3{margin:10px 0 4px;padding:10px 12px;border-radius:14px;background:var(--bg);border:1px solid var(--line)}
+.sc3 h4{margin:0 0 6px;font-size:13px;color:var(--deep)}
+.scr{display:grid;grid-template-columns:76px 1fr 44px;gap:8px;align-items:center;font-size:13px;margin:5px 0}
+.scr b{font-variant-numeric:tabular-nums}.scr .bar{height:9px;border-radius:6px;background:var(--line);overflow:hidden}.scr .bar i{display:block;height:100%;background:var(--sage)}
+.scr small{color:var(--mute);grid-column:2/-1;margin-top:-3px}
+.opt{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center;padding:8px 10px;margin:6px 0;border:1px solid var(--line);border-radius:12px;font-size:13px;cursor:pointer;background:var(--paper)}
+.opt.on{border-color:var(--sage);background:var(--sage-s)}.opt.pos b.ev{color:var(--deep)}.opt b.ev{color:var(--clay)}
+.opt small{color:var(--mute);grid-column:1/-1}
+.tbtn{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.mleg{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:13px}
+.mleg label{flex:1}.mleg input{width:auto}
+.kv{display:grid;grid-template-columns:1fr auto;gap:4px 10px;font-size:13.5px;margin-top:8px}.kv b{text-align:right;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -132,7 +144,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 <div class="top">
   <div class="brand">
     <div class="mark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
-    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.4</small></div>
+    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.6</small></div>
   </div>
   <div class="days" id="days"></div>
 </div>
@@ -159,13 +171,13 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
     <div class="row" style="margin-top:8px"><input type="time" id="aT" class="grow"><button class="btn" id="aSave">加入</button></div>
   </div>
   <div class="panel" id="helpBox" style="display:none">
-    <b>怎麼把運彩賽事帶進來</b>
+    <b>每天怎麼更新賽事</b>
     <ol style="margin:8px 0 0;padding-left:20px;line-height:1.7;font-size:13.5px">
-      <li>到「設定」按「複製抓取書籤」,在瀏覽器存成書籤(只要做一次)。</li>
-      <li>登入運彩,打開「每日賽事 → 足球」,開那個書籤:會自動抓今天,再切到明天分頁抓一次。</li>
-      <li>回到本 App,按「貼上匯入 → 讀取剪貼簿」。</li>
+      <li>第一次:到「設定」按「複製抓取書籤」,存成 Safari 書籤(之後都不用再做)。</li>
+      <li>登入運彩 → 每日賽事 → 足球,按書籤。若跳出「正在開啟…」,等頁面載入後<b>再按一次</b>。</li>
+      <li>書籤會抓今天+明天,<b>自動回到本 App 並匯入</b>,不用複製貼上。</li>
     </ol>
-    <div class="hint">書籤打不開時:在運彩頁面直接全選並複製頁面文字(先看今天、再看明天各複製一次),貼到「貼上匯入」也能解析。每場賽事自帶日期,會自動分到今天/明天。列表頁沒有小分賠率,可在賽事卡展開後手動補填。</div>
+    <div class="hint">運彩要登入才看得到賽事,我沒辦法替你登入或在背景自動抓,所以至少要按一下書籤。想少按一次:登入後把賽事表那個頁面本身存成書籤再用。</div>
   </div>
   <div class="hint" id="impMsg" style="white-space:pre-wrap"></div>
   <details class="note"><summary>⚠ 先看回測結論</summary><p>用 2022–2023 預測 2025(6,000 場):相近賠率的歷史結果,並沒有比「直接選熱門」更準,長期 ROI 約 −15%;莊家抽水約 22%。這裡給的是歷史傾向,不是穩贏保證,請控制金額。</p></details>
@@ -174,7 +186,9 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 </main>
 
 <main id="tab-parlay" class="wrap" style="display:none">
-  <div class="sec">串關範圍</div>
+  <div class="sec">我的選注・系統串關</div>
+  <div class="panel" id="mine"></div>
+  <div class="sec">自動推薦</div>
   <div class="chips" id="scope"></div>
   <div class="row" style="margin-top:12px"><span class="hint" style="margin:0">排序</span><button class="chp on" id="sEv">預期值</button><button class="chp" id="sP">命中率</button><span class="grow"></span><span class="hint" id="pInfo" style="margin:0"></span></div>
   <div id="parlays"></div>
@@ -237,10 +251,10 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
   btns.forEach(function(b){b.addEventListener('click',function(){go(b.getAttribute('data-t'))})});
 })();
 </script>
-<script src="engine.js?v=34"></script>
-<script src="parlay.js?v=34"></script>
-<script src="importer.js?v=34"></script>
-<script src="dataload.js?v=34"></script>
-<script src="app.js?v=34"></script>
+<script src="engine.js?v=36"></script>
+<script src="parlay.js?v=36"></script>
+<script src="importer.js?v=36"></script>
+<script src="dataload.js?v=36"></script>
+<script src="app.js?v=36"></script>
 </body>
 </html>
