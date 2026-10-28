@@ -140,13 +140,13 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 <main id="tab-matches" class="wrap">
   <div class="row" style="margin-top:2px">
     <button class="btn alt sm" id="bPaste">貼上匯入</button>
-    <button class="btn alt sm" id="bFetch">連線抓取</button>
+    <button class="btn alt sm" id="bHelp">抓取教學</button>
     <button class="btn alt sm" id="bAdd">手動新增</button>
     <span class="grow"></span>
     <button class="btn line sm" id="bClear">清空</button>
   </div>
   <div class="panel" id="importBox" style="display:none">
-    <label class="f" style="margin-top:0">貼上擴充功能匯出的 JSON,或每行一場「主隊 客隊 主勝 和 客勝 小分 [開賽時間 20:30] [日期]」。沒寫日期的場次會歸入目前選的那一天。</label>
+    <label class="f" style="margin-top:0">貼上書籤抓到的內容、運彩頁面文字、擴充功能的 JSON,或每行一場「主隊 客隊 主勝 和 客勝 小分 [20:30] [日期]」。沒有日期的場次歸入目前選的那天。</label>
     <textarea id="txt" placeholder="曼城 利物浦 2.1 3.4 3.2 1.9 22:00"></textarea>
     <div class="row" style="margin-top:8px"><button class="btn" id="bDo">匯入到目前日期</button><button class="btn line" id="bClip">讀取剪貼簿</button></div>
   </div>
@@ -157,6 +157,15 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
       <input id="aH" inputmode="decimal" placeholder="主勝"><input id="aD" inputmode="decimal" placeholder="和"><input id="aA" inputmode="decimal" placeholder="客勝"><input id="aU" inputmode="decimal" placeholder="小分">
     </div>
     <div class="row" style="margin-top:8px"><input type="time" id="aT" class="grow"><button class="btn" id="aSave">加入</button></div>
+  </div>
+  <div class="panel" id="helpBox" style="display:none">
+    <b>怎麼把運彩賽事帶進來</b>
+    <ol style="margin:8px 0 0;padding-left:20px;line-height:1.7;font-size:13.5px">
+      <li>到「設定」按「複製抓取書籤」,在瀏覽器存成書籤(只要做一次)。</li>
+      <li>登入運彩,打開「每日賽事 → 足球」,開那個書籤:會自動抓今天,再切到明天分頁抓一次。</li>
+      <li>回到本 App,按「貼上匯入 → 讀取剪貼簿」。</li>
+    </ol>
+    <div class="hint">書籤打不開時:在運彩頁面直接全選並複製頁面文字(先看今天、再看明天各複製一次),貼到「貼上匯入」也能解析。每場賽事自帶日期,會自動分到今天/明天。列表頁沒有小分賠率,可在賽事卡展開後手動補填。</div>
   </div>
   <div class="hint" id="impMsg"></div>
   <details class="note"><summary>⚠ 先看回測結論</summary><p>用 2022–2023 預測 2025(6,000 場):相近賠率的歷史結果,並沒有比「直接選熱門」更準,長期 ROI 約 −15%;莊家抽水約 22%。這裡給的是歷史傾向,不是穩贏保證,請控制金額。</p></details>
@@ -194,13 +203,12 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
     <div class="row" style="margin-top:10px"><button class="btn" id="sSave">儲存</button></div>
   </div>
 
-  <div class="sec">賽事來源</div>
+  <div class="sec">抓取書籤</div>
   <div class="panel">
-    <label class="f" style="margin-top:0">資料代理網址(Cloudflare Worker)</label><input id="sProxy" placeholder="https://xxx.workers.dev">
-    <label class="f">運彩賽事 JSON 網址</label><input id="sSrc" placeholder="https://blob.sportslottery.com.tw/apidata/…">
-    <div class="hint">「連線抓取」未經實測;找不到網址時請用貼上匯入或下面的書籤。</div>
-    <label class="f">網頁書籤(在運彩賽事頁按一下,把賽事複製到剪貼簿)</label>
-    <pre id="bm"></pre><button class="btn line sm" id="bmCopy" style="margin-top:6px">複製書籤程式</button>
+    <div class="hint" style="margin-top:0">在運彩「每日賽事 → 足球」頁面開這個書籤,會讀取畫面文字、自動切到明天再讀一次,全部複製到剪貼簿。它只讀你眼前的頁面,不會送出任何資料。</div>
+    <pre id="bm"></pre>
+    <div class="row" style="margin-top:8px"><button class="btn" id="bmCopy">複製抓取書籤</button></div>
+    <div class="hint">手機瀏覽器不能直接貼上 javascript: 網址時:先把任一頁存成書籤,再把書籤的網址改成剛複製的內容。</div>
   </div>
 </main>
 

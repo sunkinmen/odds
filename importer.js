@@ -48,7 +48,64 @@
     });
     return out;
   }
-  function parse(text) {
+  /* 運彩「每日賽事」頁面文字解析:不依賴 DOM 結構,只看畫面上複製出來的文字。
+   * 版面(依使用者截圖):賽事編號(4位數) / 序號 / 「28 10月 18:00」 / 客隊 / 主隊 / 客賠 和賠 主賠 / 「+27」
+   * 欄位順序為 客場、和局、主場。 */
+  const NOISE = new Set(['客場', '和局', '主場', '全部', '電視', '直播串流', '足球', '體育', '今天', '明天', '更多', '客', '和', '主', '直播', '入金']);
+  function inferDate(mon, day, today) {
+    const t = today || new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
+    let y = +t.slice(0, 4);
+    const mk = yy => `${yy}-${String(mon).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    let d = mk(y); const diff = (new Date(d) - new Date(t)) / 864e5;
+    if (diff < -200) d = mk(y + 1); else if (diff > 200) d = mk(y - 1);
+    return d;
+  }
+  function fromPageText(text, today) {
+    let lines = String(text).split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    // 日期被拆成多個節點時(「28」「10月」「18:00」)先合併
+    const mg = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\d{1,2}$/.test(lines[i]) && /^\d{1,2}\s*月$/.test(lines[i + 1] || '')) { let s = lines[i] + ' ' + lines[i + 1]; i++; if (/^\d{1,2}:\d{2}$/.test(lines[i + 1] || '')) { s += ' ' + lines[i + 1]; i++; } mg.push(s); } else mg.push(lines[i]);
+    }
+    lines = mg;
+    const dateRe = /(\d{1,2})\s*(\d{1,2})\s*月/, timeRe = /(\d{1,2}):(\d{2})/;
+    const isNo = s => /^\d{4}$/.test(s) && +s >= 1000;
+    const starts = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (!isNo(lines[i])) continue;
+      for (let j = i + 1; j <= Math.min(i + 4, lines.length - 1); j++) if (dateRe.test(lines[j])) { starts.push(i); break; }
+    }
+    const out = [], seen = new Set();
+    let league = '';
+    if (starts.length) { const pre = lines.slice(0, starts[0]).filter(x => !/^\d+$/.test(x) && !NOISE.has(x) && x.length >= 2 && !dateRe.test(x) && !/^星期/.test(x) && !/[:：]/.test(x)); league = pre.length ? pre[pre.length - 1] : ''; }
+    starts.forEach((st, k) => {
+      let en = k + 1 < starts.length ? starts[k + 1] : lines.length;
+      const blk = lines.slice(st + 1, en);
+      // 區塊在「+27」(更多盤口)處結束;其後到下一場之前的文字當作下一場的聯賽標題
+      const cut = blk.findIndex(s => /^\+\d+$/.test(s));
+      const body = cut >= 0 ? blk.slice(0, cut) : blk;
+      const tail = cut >= 0 ? blk.slice(cut + 1) : [];
+      let dm = null, tm = null; const texts = [], decs = [];
+      body.forEach(s => {
+        const a = s.match(dateRe); if (a && !dm) { dm = a; const b = s.match(timeRe); if (b) tm = b; return; }
+        const b = s.match(timeRe); if (b && !tm && /^\d{1,2}:\d{2}$/.test(s)) { tm = b; return; }
+        if (/^\d{1,3}\.\d{2}$/.test(s)) { decs.push(+s); return; }
+        if (/^\d+$/.test(s) || NOISE.has(s) || s.length < 2) return;
+        texts.push(s);
+      });
+      if (dm && decs.length >= 3 && texts.length >= 2) {
+        const date = inferDate(+dm[2], +dm[1], today);
+        const m = { id: lines[st] + '-' + date.slice(5), league, away: texts[0], home: texts[1], oa: decs[0], od: decs[1], oh: decs[2], ou: 0, minLeg: 0, date };
+        if (tm) { m.time = tm[1].padStart(2, '0') + ':' + tm[2]; m.minutes = +tm[1] * 60 + +tm[2]; }
+        m.weekday = (new Date(date + 'T00:00:00Z').getUTCDay() + 6) % 7;
+        if (!seen.has(m.id)) { seen.add(m.id); out.push(m); }
+      }
+      const cand = tail.filter(s => !/^\d+$/.test(s) && !NOISE.has(s) && s.length >= 2 && !dateRe.test(s));
+      league = cand.length ? cand[cand.length - 1] : (cut >= 0 ? '' : league);
+    });
+    return out;
+  }
+  function parse(text, ctx) {
     text = String(text || '').trim();
     if (!text) return [];
     try {
@@ -58,8 +115,11 @@
       if (arr.length && (arr[0].htn || arr[0].ms)) return fromBlob(arr);
       if (arr.length && arr[0].home) return arr;
       return [];
-    } catch (e) { return fromText(text); }
+    } catch (e) {
+      const pg = fromPageText(text, ctx && ctx.today);
+      return pg.length ? pg : fromText(text);
+    }
   }
-  const api = { parse, fromExtension, fromBlob, fromText };
+  const api = { parse, fromExtension, fromBlob, fromText, fromPageText };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OHI = api;
 })(typeof self !== 'undefined' ? self : this);

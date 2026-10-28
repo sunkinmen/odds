@@ -4,7 +4,7 @@
     get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
   };
-  const DEF = { minOdds: 1.3, minProb: 0.5, kMin: 2, kMax: 4, minJoint: 0.12, rules: '', proxy: '', src: '' };
+  const DEF = { minOdds: 1.3, minProb: 0.5, kMin: 2, kMax: 4, minJoint: 0.12, rules: '' };
   let cfg = Object.assign({}, DEF, store.get('oh_cfg', {}));
   let matches = store.get('oh_matches', []);
   let db = null, sortBy = 'ev', analyses = new Map();
@@ -93,7 +93,7 @@
     let hit = null;
     if (!db) verdict = '<span class="tag plain">等待資料庫…</span>';
     else if (a) {
-      const { an, pb } = a, b = pb.best; hit = b;
+      const { an, pb } = a, b = pb.best && pb.best.p >= cfg.minProb ? pb.best : null; hit = b;
       const unk = [an.resolved.home, an.resolved.away].some(x => x.id < 0);
       if (b) {
         cls = 'pick';
@@ -106,7 +106,7 @@
       det = `<div class="det"><div class="lg" style="margin-top:8px">強隊:${esc(an.strongName)} ・ 合併機率 勝${pct(an.p[0])} 和${pct(an.p[1])} 負${pct(an.p[2])}${an.pu ? ` ・ 小分${pct(an.pu.p)}` : ''}</div>${layerBlock(an)}
         <div class="lg2"><span><s style="background:var(--sage)"></s>強隊勝</span><span><s style="background:var(--sand)"></s>和</span><span><s style="background:var(--clay)"></s>強隊負</span></div>
         <div class="hint">罕見組合檢查:相同賠率(±3%)共 ${an.anomaly.n} 場${an.anomaly.n ? `,涉及這兩隊 ${pct(an.anomaly.teamShare)}` : ''}。回測中此訊號沒有優於選熱門。</div>
-        <div class="row" style="margin:8px 0 2px"><span class="hint" style="margin:0">最低串數</span><select class="ml" style="width:auto;padding:6px 10px">${[0, 2, 3, 4, 5].map(v => `<option value="${v}" ${(m.minLeg || 0) === v ? 'selected' : ''}>${v ? v + ' 串起' : '依規則'}</option>`).join('')}</select><span class="grow"></span><button class="btn line sm del">刪除</button></div></div>`;
+        <div class="row" style="margin:8px 0 2px"><span class="hint" style="margin:0">小分賠率</span><input class="ou-in" inputmode="decimal" style="width:80px;padding:6px 10px" value="${m.ou || ''}" placeholder="選填"><span class="hint" style="margin:0 0 0 6px">最低串數</span><select class="ml" style="width:auto;padding:6px 10px">${[0, 2, 3, 4, 5].map(v => `<option value="${v}" ${(m.minLeg || 0) === v ? 'selected' : ''}>${v ? v + ' 串起' : '依規則'}</option>`).join('')}</select><span class="grow"></span><button class="btn line sm del">刪除</button></div></div>`;
     }
     const pk = hit && hit.market === '勝平負' ? hit.side : null, pu = hit && hit.market === '小分';
     const ex = (a && a.an.resolved.league) || '';
@@ -128,10 +128,11 @@
   $('list').addEventListener('click', e => {
     const c = e.target.closest('.match'); if (!c) return; const id = c.dataset.id;
     if (e.target.classList.contains('del')) { matches = matches.filter(x => x.id !== id); store.set('oh_matches', matches); render(); return; }
-    if (e.target.closest('select')) return;
+    if (e.target.closest('select,input')) return;
     c.classList.toggle('open');
   });
   $('list').addEventListener('change', e => {
+    if (e.target.classList.contains('ou-in')) { const m = matches.find(x => x.id === e.target.closest('.match').dataset.id); m.ou = +e.target.value > 1 ? +e.target.value : 0; store.set('oh_matches', matches); render(); return; }
     if (!e.target.classList.contains('ml')) return;
     const id = e.target.closest('.match').dataset.id, m = matches.find(x => x.id === id); m.minLeg = +e.target.value; store.set('oh_matches', matches); render();
   });
@@ -146,7 +147,7 @@
     if (!db) return;
     const legs = [], inScope = scoped();
     inScope.forEach(m => {
-      const a = analyses.get(m.id); if (!a || !a.pb.best) return; const b = a.pb.best;
+      const a = analyses.get(m.id); if (!a || !a.pb.best || a.pb.best.p < cfg.minProb) return; const b = a.pb.best;
       legs.push({ id: m.id, label: `${m.away} @ ${m.home}`, pick: b.market === '小分' ? '小分' : b.side, tm: `${md(m.date)} ${m.time || ''}`, odds: b.odds, p: b.p, minLeg: minLegOf(m) });
     });
     const r = OHP.recommend(legs, { ...cfg, sortBy });
@@ -176,9 +177,9 @@
     store.set('oh_matches', matches); render();
     $('impMsg').textContent = `匯入 ${arr.length - drop} 場(新增 ${added})${drop ? `,略過已過期 ${drop} 場` : ''}`;
   }
-  const show = id => ['importBox', 'addBox'].forEach(x => { const el = $(x); el.style.display = x === id && el.style.display === 'none' ? 'block' : 'none'; });
+  const show = id => ['importBox', 'addBox', 'helpBox'].forEach(x => { const el = $(x); el.style.display = x === id && el.style.display === 'none' ? 'block' : 'none'; });
   $('bPaste').onclick = () => show('importBox'); $('bAdd').onclick = () => show('addBox');
-  $('bDo').onclick = () => { const a = OHI.parse($('txt').value); if (a.length) { addMatches(a); $('txt').value = ''; } else $('impMsg').textContent = '解析不到任何賽事,請確認格式'; };
+  $('bDo').onclick = () => { const a = OHI.parse($('txt').value, { today: today() }); if (a.length) { addMatches(a); $('txt').value = ''; } else $('impMsg').textContent = '解析不到任何賽事,請確認格式'; };
   $('bClip').onclick = async () => { try { $('txt').value = await navigator.clipboard.readText(); $('bDo').click(); } catch (e) { $('impMsg').textContent = '無法讀取剪貼簿,請長按貼上'; } };
   $('bClear').onclick = () => { if (confirm('清空所有賽事?')) { matches = []; store.set('oh_matches', matches); render(); } };
   $('aSave').onclick = () => {
@@ -187,26 +188,37 @@
     const t = $('aT').value; if (t) { m.time = t; m.minutes = +t.slice(0, 2) * 60 + +t.slice(3, 5); }
     addMatches([m]); ['aHome', 'aAway', 'aH', 'aD', 'aA', 'aU'].forEach(k => $(k).value = '');
   };
-  $('bFetch').onclick = async () => {
-    if (!cfg.proxy || !cfg.src) { $('impMsg').textContent = '請先到「設定」填入資料代理與來源網址'; return; }
-    $('impMsg').textContent = '抓取中…';
-    try {
-      const r = await fetch(cfg.proxy.replace(/\/$/, '') + '/?url=' + encodeURIComponent(cfg.src));
-      const a = OHI.parse(await r.text());
-      a.length ? addMatches(a) : $('impMsg').textContent = '抓到資料但解析不出賽事(格式與預期不同),請改用貼上匯入';
-    } catch (e) { $('impMsg').textContent = '抓取失敗:' + e.message; }
-  };
+  $('bHelp').onclick = () => show('helpBox');
 
   // ---------- 設定 ----------
-  function fillCfg() { $('sMinOdds').value = cfg.minOdds; $('sMinProb').value = cfg.minProb; $('sKMin').value = cfg.kMin; $('sKMax').value = cfg.kMax; $('sMinJoint').value = cfg.minJoint; $('sRules').value = cfg.rules; $('sProxy').value = cfg.proxy; $('sSrc').value = cfg.src; }
+  function fillCfg() { $('sMinOdds').value = cfg.minOdds; $('sMinProb').value = cfg.minProb; $('sKMin').value = cfg.kMin; $('sKMax').value = cfg.kMax; $('sMinJoint').value = cfg.minJoint; $('sRules').value = cfg.rules; }
   $('sSave').onclick = () => {
-    cfg = { minOdds: +$('sMinOdds').value || 1.3, minProb: +$('sMinProb').value || 0.5, kMin: Math.max(2, +$('sKMin').value || 2), kMax: Math.min(8, +$('sKMax').value || 4), minJoint: +$('sMinJoint').value || 0.12, rules: $('sRules').value, proxy: $('sProxy').value.trim(), src: $('sSrc').value.trim() };
+    cfg = { minOdds: +$('sMinOdds').value || 1.3, minProb: +$('sMinProb').value || 0.5, kMin: Math.max(2, +$('sKMin').value || 2), kMax: Math.min(8, +$('sKMax').value || 4), minJoint: +$('sMinJoint').value || 0.12, rules: $('sRules').value };
     store.set('oh_cfg', cfg); render(); alert('已儲存');
   };
   fillCfg();
-  const bmSrc = "(()=>{const o=[...document.querySelectorAll('[aria-label*=\"odds\"]')].map(e=>{const m=(e.getAttribute('aria-label')||'').match(/^([\\s\\S]+?)\\s*-\\s*([\\s\\S]+?)\\s*-\\s*odds\\s*([\\d.]+)\\s*$/i);return m&&{e,mk:m[1].trim(),s:m[2].trim(),o:+m[3]}}).filter(Boolean);const R=new Map();o.forEach(x=>{let c=x.e,r=null;for(let i=0;i<20&&c;i++){if(c.querySelector&&c.querySelector('[data-test-id=\"chip-event-header\"]')){r=c;break}c=c.parentElement}if(!r)return;if(!R.has(r)){const l=r.querySelector('[data-test-id=\"chip-event-header\"] label');const t=(r.textContent||'').replace(/\\s+/g,' ');const dm=t.match(/(\\d{1,2})\\s*(\\d{1,2})月/),tm=t.match(/(\\d{1,2}):(\\d{2})/);R.set(r,{id:l?l.textContent.trim():'',dt:dm&&tm?new Date().getFullYear()+'-'+dm[2]+'-'+dm[1]+' '+tm[1]+':'+tm[2]:'',mk:[]})}R.get(r).mk.push(x)});const out=[];R.forEach(d=>{let ml=null,u=0;const g={};d.mk.forEach(x=>(g[x.mk]=g[x.mk]||[]).push(x));Object.values(g).forEach(s=>{if(s.some(x=>x.s==='和局'))ml=s;const us=s.find(x=>x.s.includes('小'));if(us)u=us.o});if(!ml)return;const dr=ml.find(x=>x.s==='和局'),t=ml.filter(x=>x.s!=='和局');if(t.length<2||!d.id)return;out.push({matchId:d.id,awayTeam:t[0].s,oddsAway:t[0].o,homeTeam:t[1].s,oddsHome:t[1].o,oddsDraw:dr.o,oddsUnder:u||null,matchDate:d.dt})});const j=JSON.stringify(out);(navigator.clipboard?navigator.clipboard.writeText(j):Promise.reject()).then(()=>alert('已複製 '+out.length+' 場'),()=>prompt('複製這段:',j))})()";
-  $('bm').textContent = 'javascript:' + bmSrc;
-  $('bmCopy').onclick = () => navigator.clipboard.writeText('javascript:' + bmSrc).then(() => alert('已複製'), () => alert('請長按選取文字複製'));
+  function bm() {
+    (async () => {
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const txt = () => { const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), r = []; let n; while ((n = w.nextNode())) { const p = n.parentElement; if (!p || /^(SCRIPT|STYLE|NOSCRIPT)$/.test(p.tagName)) continue; const s = n.nodeValue.replace(/\s+/g, ' ').trim(); if (s) r.push(s); } return r.join('\n'); };
+      const root = () => document.scrollingElement || document.body;
+      const grab = async () => { let h = 0; for (let i = 0; i < 12; i++) { root().scrollTo(0, root().scrollHeight); await sleep(350); if (root().scrollHeight === h) break; h = root().scrollHeight; } root().scrollTo(0, 0); return txt(); };
+      const find = re => [...document.querySelectorAll('button,a,div,span,li,p')].filter(e => e.children.length <= 1 && re.test((e.innerText || '').trim()));
+      let out = await grab(), msg = '只抓到目前畫面(沒找到明天分頁)';
+      const nx = find(/^星期[一二三四五六日]\s*\d{1,2},\s*\d{1,2}$/)[0];
+      if (nx) { const before = out; nx.click(); for (let i = 0; i < 14; i++) { await sleep(500); if (i >= 2 && txt() !== before) break; } out += '\n' + await grab(); msg = '今天+明天'; const td = find(/^今天$/)[0]; if (td) td.click(); }
+      const done = () => alert('已複製(' + msg + '),回到賠率獵人按「貼上匯入」');
+      try { await navigator.clipboard.writeText(out); done(); } catch (e) {
+        const w = document.createElement('div'); w.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fff;padding:12px;display:flex;flex-direction:column;gap:8px';
+        const t = document.createElement('textarea'); t.value = out; t.style.cssText = 'flex:1;width:100%';
+        const b = document.createElement('button'); b.textContent = '複製並關閉'; b.style.cssText = 'padding:14px;font-size:16px';
+        b.onclick = () => { t.select(); document.execCommand('copy'); w.remove(); }; w.append(t, b); document.body.append(w);
+      }
+    })();
+  }
+  const bmSrc = 'javascript:(' + bm.toString().replace(/\s*\n\s*/g, '') + ')()';
+  $('bm').textContent = bmSrc;
+  $('bmCopy').onclick = () => navigator.clipboard.writeText(bmSrc).then(() => alert('已複製'), () => alert('請長按選取文字複製'));
 
   // ---------- Tab ----------
   document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
