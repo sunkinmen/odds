@@ -150,6 +150,7 @@
      組合 = 主/和/客三個賠率都在 ±tol 內(先 3%,同聯賽不足 3 場才放寬到 5%、8%)。
      集中度 = 同聯賽組合內,最多人出現的 主/和/客 結果占比,以及 小分(<=2球)/大分(>=3球) 占比。 */
   const COMBO_TOL = [0.03, 0.05, 0.08];
+  const ANOM = { maxN: 15, minShare: 0.7 };   // 異常篩選:同聯賽同賠率組合樣本 3~15 場,且結果(勝平負或大小分)>=70% 同向
   function comboScan(db, m, L, tol) {
     const c = [0, 0, 0], r = { tol, nAll: 0, nLg: 0, c, under: 0, over: 0 };
     for (let i = 0; i < db.n; i++) {
@@ -277,7 +278,7 @@
     cand.sort((a, b) => b.ev - a.ev);
     /* 鎖定邏輯:每場「勝平負」「大小分」各取一個最佳(t1/t2)。
        有同聯賽同賠率樣本(>=3 場)→ 取結果最集中者;沒有 → 取市場熱門(最低賠率 / 去水位後機率較高的一邊)。
-       建議(實心)只會從 t1/t2 之中挑:樣本>=3、集中度>=70%、賠率>=minOdds,集中度高者優先,所以實心必然與虛線重疊。 */
+       建議(實心)=異常場次:只會從 t1/t2 之中挑,樣本 3~15 場、集中度>=70%、賠率>=minOdds,集中度高者優先,所以實心必然與虛線重疊。 */
     const cb = an.combo || null, mk = k => cand.find(c => c.key === k) || null;
     const lg = cb && cb.nLg >= 3;
     let t1 = null, t2 = null;
@@ -285,11 +286,11 @@
     if (!t1) t1 = cand.filter(c => c.market === '勝平負' && c.odds > 1).sort((a, b) => a.odds - b.odds)[0] || null;
     if (lg && cb.ou) { t2 = mk(cb.ou.key); if (t2) t2.cx = { share: cb.ou.share, cnt: cb.ou.cnt, n: cb.nLg, src: 'league' }; }
     if (!t2) { const U = mk('U'), O = mk('O'); t2 = U && O ? (an.pu.market >= 0.5 ? U : O) : (U || null); }
-    const ok = [t1, t2].filter(c => c && c.cx && c.cx.src === 'league' && c.cx.share >= 0.7 && c.odds >= (minOdds || 1.3));
+    const ok = [t1, t2].filter(c => c && c.cx && c.cx.src === 'league' && c.cx.share >= ANOM.minShare && c.cx.n <= ANOM.maxN && c.odds >= (minOdds || 1.3));
     ok.sort((a, b) => b.cx.share - a.cx.share || a.cx.n - b.cx.n);
     return { all: cand, best: ok[0] || null, t1, t2 };
   }
 
-  const api = { load, analyze, mlProb, pickBest, resolveTeam, norm, MIN_N, histRoi, combo, slotScores, tierOf };
+  const api = { load, analyze, mlProb, pickBest, resolveTeam, norm, MIN_N, histRoi, combo, slotScores, tierOf, ANOM };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OH = api;
 })(typeof self !== 'undefined' ? self : this);
