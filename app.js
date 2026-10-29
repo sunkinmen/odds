@@ -139,7 +139,7 @@
   function cxHtml(m, a) {
     const cb = a.an.combo, sl = a.an.slot; let h = '';
     if (cb && cb.nLg >= 3) {
-      const parts = [], sp = x => x.shr ? x.shr.p : x.share;
+      const parts = [], sp = x => x.share;
       if (cb.hda) parts.push(`${cb.hda.side}${cb.hda.side === '和' ? '' : '勝'} ${pct(sp(cb.hda))}`);
       if (cb.ou) parts.push(`${cb.ou.side}分 ${pct(sp(cb.ou))}`);
       h += `<div class="cx"><b>同聯賽相近賠率</b> ${cb.nLg} 場:${parts.join('・')}</div>`;
@@ -173,7 +173,7 @@
       const lab = c => c.key === 'U' ? '小分' : c.key === 'O' ? '大分' : c.side;
       if (b) {
         cls = b.anom ? 'pick' : '';
-        verdict = `<span class="tag">建議 ${lab(b)} @${b.odds}${b.anom ? '・異常' : ''}</span>${pb.alt ? `<span class="tag plain">另 ${lab(pb.alt)} @${pb.alt.odds}</span>` : ''}`;
+        verdict = `<span class="tag">建議 ${lab(b)} @${b.odds}${b.anom ? '・高機率' : ''}</span>${pb.alt ? `<span class="tag plain">另 ${lab(pb.alt)} @${pb.alt.odds}</span>` : ''}`;
         { const mv = OHT.movement(SNAPS, m, b.key); if (mv) verdict += `<span class="mv ${mv.pct < 0 ? 'dn' : 'up'}" title="賠率變動:${mv.open} → ${mv.now}(共 ${mv.n} 次紀錄)">${mv.pct < 0 ? '▼' : '▲'}${mv.open}→${mv.now}</span>`; }
         if (minLegOf(m) > 1) verdict += `<span class="tag plain">${minLegOf(m)}串起</span>`;
       } else { cls = 'skip'; verdict = `<span class="tag skip">賠率偏低,不推薦</span>`; }
@@ -205,7 +205,7 @@
       const a = analyses.get(m.id); let s = null;
       if (a) {
         if (sortMode === 'high') { const h = highPick(a); if (h) { s = [-h.odds, -(h.conf || 0)]; info.set(m.id, h); } }
-        else if (a.pb.best) { const b = a.pb.best, cb = a.an.combo; s = b.cx ? [OH.tierOf(b.cx.n, b.cx.share), cb.lgShare >= 0.6 ? 0 : 1, -b.cx.share, b.cx.n] : [3, 1, -b.conf, 0]; tiers.set(m.id, s[0]); }
+        else if (a.pb.best) { const b = a.pb.best, cb = a.an.combo; s = b.anom ? [0, -b.score] : [3, -b.conf]; tiers.set(m.id, s[0]); }
       }
       (s ? keyed : rest).push({ m, s });
     });
