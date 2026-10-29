@@ -176,7 +176,7 @@
         verdict = `<span class="tag">建議 ${lab(b)} @${b.odds}${b.anom ? '・異常' : ''}</span>${pb.alt ? `<span class="tag plain">另 ${lab(pb.alt)} @${pb.alt.odds}</span>` : ''}`;
         { const mv = OHT.movement(SNAPS, m, b.key); if (mv) verdict += `<span class="mv ${mv.pct < 0 ? 'dn' : 'up'}" title="賠率變動:${mv.open} → ${mv.now}(共 ${mv.n} 次紀錄)">${mv.pct < 0 ? '▼' : '▲'}${mv.open}→${mv.now}</span>`; }
         if (minLegOf(m) > 1) verdict += `<span class="tag plain">${minLegOf(m)}串起</span>`;
-      }
+      } else { cls = 'skip'; verdict = `<span class="tag skip">賠率偏低,不推薦</span>`; }
       verdict += cxHtml(m, a);
       (an.tail || []).filter(t => t.flag).forEach(t => { verdict += `<span class="tag flag" title="比分分布與大小盤估算">高比分 大${t.line} 偏高 ${pct(t.p)}(市場${pct(t.pm)}) @${t.odds}</span>`; });
       if (unk) verdict += '<span class="tag plain">部分隊名查無歷史</span>';
