@@ -20,40 +20,53 @@
   function similar(db, m, asOf) {
     const out = []; for (let i = 0; i < db.R.length; i++) { const r = db.R[i]; if (asOf && r.d >= asOf) break; if (Math.abs(r.sp - m.sp) <= TOL_SP && Math.abs(r.tot - m.tot) <= TOL_TOT) out.push(r); } return out;
   }
-  function recent(db, team, asOf, N) {
-    const idx = db.by[team] || [], out = []; for (let j = idx.length - 1; j >= 0 && out.length < N; j--) { const r = db.R[idx[j]]; if (asOf && r.d >= asOf) continue; out.push(r); } return out;
+  const wdOf = d => new Date(Date.UTC(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8))).getUTCDay();
+  const minOf = t => { t = String(t || '').replace(':', ''); return t.length >= 3 ? +t.slice(0, -2) * 60 + +t.slice(-2) : null; };
+  /* 一組歷史場次的統計:客蓋盤、大分、客勝、平均總分/盤口總分 */
+  function stat(list) {
+    const s = { n: list.length, ak: 0, an: 0, ok: 0, on: 0, wk: 0, tot: 0, line: 0 };
+    list.forEach(r => { const o = outcome(r); if (o.aCover != null) { s.an++; if (o.aCover) s.ak++; } if (o.over != null) { s.on++; if (o.over) s.ok++; } if (o.aWin) s.wk++; s.tot += r.ga + r.gh; s.line += r.tot; });
+    s.avgTot = s.n ? s.tot / s.n : null; s.avgLine = s.n ? s.line / s.n : null; return s;
   }
+  const before = (r, asOf) => !asOf || r.d < asOf;
+  /* 四組比對:①主隊主場相近盤口 ②客隊客場相近盤口 ③聯盟相近盤口組合 ④同星期、開賽時間相近 */
+  function layers(db, m, asOf) {
+    const own = (team, side) => (db.by[team] || []).map(i => db.R[i]).filter(r => r[side] === team && before(r, asOf));
+    const near = list => list.filter(r => Math.abs(r.sp - m.sp) <= TOL_SP_T).sort((a, b) => a.d < b.d ? 1 : -1);
+    const nearT = list => list.filter(r => Math.abs(r.tot - m.tot) <= TOL_TOT_T).sort((a, b) => a.d < b.d ? 1 : -1);
+    const hmAll = own(m.hm, 'hm'), awAll = own(m.aw, 'aw');
+    const L = {
+      home: { sp: near(hmAll), tot: nearT(hmAll) }, away: { sp: near(awAll), tot: nearT(awAll) },
+      lg: similar(db, m, asOf).sort((a, b) => a.d < b.d ? 1 : -1)
+    };
+    const wd = m.d ? wdOf(m.d) : null, mm = minOf(m.t);
+    L.slot = (wd == null || mm == null) ? [] : db.R.filter(r => before(r, asOf) && wdOf(r.d) === wd && minOf(r.t) != null && Math.abs(minOf(r.t) - mm) <= 90 && Math.abs(r.sp - m.sp) <= 4).sort((a, b) => a.d < b.d ? 1 : -1);
+    L.wd = wd; return L;
+  }
+  const TOL_SP_T = 2.0, TOL_TOT_T = 6.0;
   /* 回傳每個市場的兩邊估計機率與推薦 */
   function analyze(db, m, asOf) {
-    const sim = similar(db, m, asOf), simSp = db.R.filter(r => (!asOf || r.d < asOf) && Math.abs(r.sp - m.sp) <= TOL_SP);
-    const ra = recent(db, m.aw, asOf, 15), rh = recent(db, m.hm, asOf, 15);
-    const atsOf = (team, list) => cnt(list, r => { const o = outcome(r); if (o.aCover == null) return null; return r.aw === team ? o.aCover : !o.aCover; });
-    const ovOf = list => cnt(list, r => outcome(r).over);
-    // ---- 讓分:p(客蓋) ----
-    const S = cnt(sim, r => outcome(r).aCover), S2 = cnt(simSp, r => outcome(r).aCover);
-    const pS = shrink(S.k, S.n, 0.5, 30);
-    const tA = atsOf(m.aw, ra), tH = atsOf(m.hm, rh);
-    const pTeam = (shrink(tA.k, tA.n, 0.5, 15) + (1 - shrink(tH.k, tH.n, 0.5, 15))) / 2;
-    const pAcover = 0.5 + ((pS - 0.5) + (pTeam - 0.5) * 0.5);
-    // ---- 大小:p(大) ----
-    const O = cnt(sim, r => outcome(r).over), O2 = cnt(simSp.filter(r => Math.abs(r.tot - m.tot) <= TOL_TOT), r => outcome(r).over);
-    const oA = ovOf(ra), oH = ovOf(rh);
-    const pO = shrink(O.k, O.n, 0.5, 30), pOteam = (shrink(oA.k, oA.n, 0.5, 15) + shrink(oH.k, oH.n, 0.5, 15)) / 2;
-    const pOver = 0.5 + ((pO - 0.5) + (pOteam - 0.5) * 0.5);
-    // ---- 不讓分:p(客勝),先驗=去水位後的市場機率 ----
-    const [pmA] = devig2(m.mlA, m.mlH);
-    const W = cnt(simSp, r => outcome(r).aWin), pW = shrink(W.k, W.n, pmA, 40);
+    const L = layers(db, m, asOf);
+    const st = { home: { sp: stat(L.home.sp), tot: stat(L.home.tot) }, away: { sp: stat(L.away.sp), tot: stat(L.away.tot) }, lg: stat(L.lg), slot: stat(L.slot) };
+    const wavg = arr => { let s = 0, w = 0; arr.forEach(([p, x]) => { s += p * x; w += x; }); return s / w; };
+    // 讓分 p(客蓋):主隊主場蓋盤率低 → 客蓋機率高
+    const pAcover = wavg([[1 - shrink(st.home.sp.an - st.home.sp.ak, st.home.sp.an, 0.5, 10), 1], [shrink(st.away.sp.ak, st.away.sp.an, 0.5, 10), 1], [shrink(st.lg.ak, st.lg.an, 0.5, 30), 1], [shrink(st.slot.ak, st.slot.an, 0.5, 30), 0.5]]);
+    // 大小 p(大)
+    const pOver = wavg([[shrink(st.home.tot.ok, st.home.tot.on, 0.5, 10), 1], [shrink(st.away.tot.ok, st.away.tot.on, 0.5, 10), 1], [shrink(st.lg.ok, st.lg.on, 0.5, 30), 1], [shrink(st.slot.ok, st.slot.on, 0.5, 30), 0.5]]);
+    // 不讓分 p(客勝):先驗=去水位後的市場機率
+    const pmA = m.mlA && m.mlH ? devig2(m.mlA, m.mlH)[0] : 0.5;
+    const pW = wavg([[shrink(st.lg.wk, st.lg.n, pmA, 40), 1], [1 - shrink(st.home.sp.n - st.home.sp.wk, st.home.sp.n, 1 - pmA, 15), 1], [shrink(st.away.sp.wk, st.away.sp.n, pmA, 15), 1]]);
     const clamp = x => Math.max(0.05, Math.min(0.95, x));
-    const mk = (market, aKey, hKey, pA, oA_, oH_, n, extra) => {
+    const mk = (market, aKey, hKey, pA, oA_, oH_, n) => {
       const sA = { market, key: aKey, p: clamp(pA), odds: oA_ }, sH = { market, key: hKey, p: clamp(1 - pA), odds: oH_ };
       [sA, sH].forEach(c => { c.val = c.p * c.odds; });
-      const best = sA.p >= sH.p ? sA : sH; return Object.assign({ market, A: sA, H: sH, best, n }, extra || {});
+      const best = sA.p >= sH.p ? sA : sH; return { market, A: sA, H: sH, best, n };
     };
     return {
-      sim: { n: sim.length, sp: S, tot: O, ml: W },
-      spread: mk('讓分', 'AS', 'HS', pAcover, m.spAo, m.spHo, S.n, { team: { a: tA, h: tH } }),
-      total: mk('大小', 'O', 'U', pOver, m.ov, m.un, O.n, { team: { a: oA, h: oH } }),
-      ml: mk('不讓分', 'AM', 'HM', pW, m.mlA, m.mlH, W.n),
+      L, st, sim: { n: L.lg.length },
+      spread: mk('讓分', 'AS', 'HS', pAcover, m.spAo, m.spHo, st.lg.an),
+      total: mk('大小', 'O', 'U', pOver, m.ov, m.un, st.lg.on),
+      ml: mk('不讓分', 'AM', 'HM', pW, m.mlA, m.mlH, st.lg.n),
       pmA
     };
   }
@@ -63,6 +76,6 @@
     switch (key) { case 'AS': return o.aCover; case 'HS': return o.aCover == null ? null : !o.aCover; case 'O': return o.over; case 'U': return o.over == null ? null : !o.over; case 'AM': return o.aWin; case 'HM': return !o.aWin; }
     return null;
   }
-  const api = { load, analyze, judge, outcome, shrink, similar };
+  const api = { load, analyze, judge, outcome, shrink, similar, stat, wdOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.NBA = api;
 })(typeof self !== 'undefined' ? self : this);

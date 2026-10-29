@@ -365,8 +365,10 @@
     if (!(lg && cb.hda)) { const hs = cand.filter(c => c.market === '勝平負' && c.odds >= mo); hs.forEach(c => { c.conf = confOf(c); }); hs.sort((x, y) => y.conf * y.odds - x.conf * x.odds); if (hs[0]) t1 = hs[0]; }
     if (!(lg && cb.ou)) { const us = cand.filter(c => (c.key === 'U' || c.key === 'O') && c.odds >= mo); us.forEach(c => { c.conf = confOf(c); }); us.sort((x, y) => y.conf * y.odds - x.conf * x.odds); if (us[0]) t2 = us[0]; }
     cand.forEach(c => { c.conf = confOf(c); c.val = c.conf * c.odds; const hd = c.market === '勝平負'; c.anom = !!(c.cx && c.cx.src === 'league' && c.cx.n >= THR.minN && c.cx.raw >= (hd ? THR.hda : THR.ou)); c.score = c.anom ? (hd ? 0.60 + (c.cx.raw - THR.hda) * 0.35 : 0.55 + (c.cx.raw - THR.ou) * 0.25) : 0; });
-    const pick = [t1, t2].filter(c => c && c.odds >= mo && c.conf >= 0.3);
-    pick.sort((x, y) => (y.anom - x.anom) || (y.score - x.score) || y.val - x.val);
+    /* 低賠(< minOdds)也要給最佳選項,只是標記 low、不算異常,排在有高賠建議的後面 */
+    cand.forEach(c => { c.low = c.odds < mo; if (c.low) { c.anom = false; c.score = 0; } });
+    const pick = [t1, t2].filter(c => c && c.odds > 1 && (c.low || c.conf >= 0.3));
+    pick.sort((x, y) => (x.low - y.low) || (y.anom - x.anom) || (y.score - x.score) || y.val - x.val);
     const first = pick[0] || null, second = first ? pick.find(c => c !== first) || null : null;
     return { all: cand, best: first, alt: second, t1, t2 };
   }

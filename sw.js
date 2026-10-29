@@ -1,5 +1,5 @@
-const V = 'oh-v330';
-const FILES = ['./', 'index.html', 'model.js?v=330', 'engine.js?v=330', 'parlay.js?v=330', 'advisor.js?v=330', 'importer.js?v=330', 'dataload.js?v=330', 'track.js?v=330', 'app.js?v=330','nba.js?v=330','nba-ui.js?v=330', 'manifest.json', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'data/matches.json'];
+const V = 'oh-v331';
+const FILES = ['./', 'index.html', 'model.js?v=331', 'engine.js?v=331', 'parlay.js?v=331', 'advisor.js?v=331', 'importer.js?v=331', 'dataload.js?v=331', 'track.js?v=331', 'app.js?v=331', 'nba.js?v=331', 'nba-ui.js?v=331', 'manifest.json', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'data/matches.json'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => Promise.all(FILES.map(f => c.add(f).catch(() => { })))).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {

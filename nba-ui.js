@@ -27,6 +27,7 @@ body.nba #tab-matches > *:not(#nbaView){display:none!important}
 .nb.pick{background:var(--deep);border-color:var(--deep);color:#f3efe9}.nb.pick i{color:#d3dcd3}
 .nb small{display:block;font-weight:500;font-size:10.5px;opacity:.8}
 #nbaView .match .det p{margin:6px 0;font-size:13px}
+.hl{list-style:none;margin:4px 0 8px;padding:0}.hl li{font-size:12.5px;padding:5px 0;border-top:1px dashed var(--line)}.hl small{color:var(--mute)}
 `;
   document.head.appendChild(css);
 
@@ -63,12 +64,14 @@ body.nba #tab-matches > *:not(#nbaView){display:none!important}
     analyses.clear();
     games.forEach(g => {
       if (g.sp == null || g.tot == null) return;
-      const m = { aw: g.aw, hm: g.hm, sp: g.sp, spAo: g.spAo, spHo: g.spHo, mlA: g.mlA, mlH: g.mlH, tot: g.tot, ov: g.ov, un: g.un };
+      const m = { aw: g.aw, hm: g.hm, sp: g.sp, spAo: g.spAo, spHo: g.spHo, mlA: g.mlA, mlH: g.mlH, tot: g.tot, ov: g.ov, un: g.un, d: g.d.replace(/-/g, '').slice(0, 8), t: g.time };
       try {
-        const a = NBA.analyze(db, m, g.d.replace(/-/g, '').slice(0, 8));
-        const cands = [a.spread.best, a.total.best].concat(g.mlA && g.mlH ? [a.ml.best] : []).filter(c => c.odds >= MIN_ODDS);
-        cands.sort((x, y) => y.val - x.val);
-        analyses.set(g.id, { a, best: cands[0] || null, alt: cands[1] || null });
+        const a = NBA.analyze(db, m, m.d);
+        const per = [a.spread.best, a.total.best].concat(g.mlA && g.mlH ? [a.ml.best] : []).filter(c => c.odds);
+        const ok = per.filter(c => c.odds >= MIN_ODDS).sort((x, y) => y.val - x.val);
+        const lowAll = per.slice().sort((x, y) => y.val - x.val);
+        const best = ok[0] || lowAll[0] || null, low = !!best && best.odds < MIN_ODDS;
+        analyses.set(g.id, { a, per, best, low, alt: ok[0] ? ok[1] || null : null });
       } catch (e) { console.warn(e); }
     });
   }
@@ -77,8 +80,9 @@ body.nba #tab-matches > *:not(#nbaView){display:none!important}
   /* ---------- 呈現 ---------- */
   const LBL = { AS: '客讓分', HS: '主讓分', O: '大分', U: '小分', AM: '客不讓分', HM: '主不讓分' };
   const keyText = (c, g) => c.key === 'AS' ? `客 ${fmtLine(g.sp)}` : c.key === 'HS' ? `主 ${fmtLine(-g.sp)}` : c.key === 'O' ? `大 ${g.tot}` : c.key === 'U' ? `小 ${g.tot}` : c.key === 'AM' ? '客不讓分' : '主不讓分';
-  function row(label, A, H, best, alt, g) {
-    const box = (c, top, sub) => `<div class="nb${best && best.key === c.key ? ' pick' : alt && alt.key === c.key ? ' alt' : ''}"><i>${top}</i>${c.odds}<small>${pct(c.p)}</small></div>`;
+  function row(label, A, H, an, g) {
+    const bestKey = an.best && an.best.key, per = an.per.map(c => c.key);
+    const box = (c, top) => `<div class="nb${bestKey === c.key ? ' pick' : per.includes(c.key) ? ' alt' : ''}"><i>${top}</i>${c.odds}<small>${pct(c.p)}</small></div>`;
     return `<div class="nrow"><em>${label}</em>${box(A, label === '讓分' ? `客 ${fmtLine(g.sp)}` : label === '大小' ? `大 ${g.tot}` : '客')}${box(H, label === '讓分' ? `主 ${fmtLine(-g.sp)}` : label === '大小' ? `小 ${g.tot}` : '主')}</div>`;
   }
   function badge(g, c) {
@@ -89,25 +93,44 @@ body.nba #tab-matches > *:not(#nbaView){display:none!important}
     if (w === false) return `<span class="rb lose">輸 ${sc}</span>`;
     return `<span class="rb none">${w === null && c ? '平手 ' : '完賽 '}${sc}</span>`;
   }
+  const rate = (k, n) => n ? `${k}/${n}(${pct(k / n)})` : '—';
+  const fd = d => `${d.slice(4, 6)}/${d.slice(6, 8)} 週${WD[NBA.wdOf(d)]}`;
+  const ft = t => { t = String(t || '').replace(':', ''); return t.length >= 3 ? t.slice(0, -2).padStart(2, '0') + ':' + t.slice(-2) : ''; };
+  function histLine(r) {
+    const o = NBA.outcome(r), hl = -r.sp, tot = r.ga + r.gh;
+    const sp = o.aCover == null ? '走水' : o.aCover ? '客過盤' : '主過盤', ov = o.over == null ? '走水' : o.over ? '大' : '小';
+    return `<li><b>${fd(r.d)} ${ft(r.t)}</b> ${esc(r.aw)} ${r.ga}:${r.gh} ${esc(r.hm)}<br><small>讓分 主${fmtLine(hl)} → ${sp}・總分 ${tot}(盤 ${r.tot})→ ${ov}${r.mlA ? `・不讓分 ${o.aWin ? '客' : '主'}勝` : ''}</small></li>`;
+  };
+  function block(title, st, spL, totL, list) {
+    const hc = st.an - st.ak;
+    const head = st.n ? `<p><b>${title}</b>(${st.n} 場)</p><p>讓分:主隊過盤 ${rate(st.an - st.ak, st.an)}・大分 ${rate(st.ok, st.on)}・主勝 ${rate(st.n - st.wk, st.n)}<br>總分:平均落點 ${st.avgTot.toFixed(1)}(當時盤均 ${st.avgLine.toFixed(1)}、本場 ${spL})</p>` : `<p><b>${title}</b>:沒有符合的歷史場次</p>`;
+    return head + (list.length ? `<ul class="hl">${list.slice(0, 6).map(histLine).join('')}</ul>${list.length > 6 ? `<small class="hint">另有 ${list.length - 6} 場較早紀錄</small>` : ''}` : '');
+  }
   function detail(g, an) {
-    const a = an.a, S = a.sim;
-    const rate = (o) => o.n ? `${o.k}/${o.n}(${pct(o.k / o.n)})` : '—';
-    const tm = (o) => o.n ? `${o.k}/${o.n}` : '—';
-    return `<div class="det"><p><b>相近盤口</b>(讓分 ±1、總分 ±4)歷史 ${S.n} 場</p>
-<p>讓分:客隊蓋盤 ${rate(S.sp)}・近 15 場對盤 客隊 ${tm(a.spread.team.a)}、主隊 ${tm(a.spread.team.h)}</p>
-<p>大小:大分 ${rate(S.tot)}・近 15 場大分 客隊 ${tm(a.total.team.a)}、主隊 ${tm(a.total.team.h)}</p>
-<p>不讓分:客勝 ${rate(S.ml)}</p>
-<details class="note"><summary>ⓘ</summary><div class="hint">百分比是歷史相近盤口加兩隊近況的估計機率(已向 50% 收縮)。運彩賠率約 1.7,要命中 59% 以上才不虧;回測顯示三個市場平均都還是虧(大小分 −8%、不讓分 −14%、讓分 −16%)。</div></details></div>`;
+    const a = an.a, L = a.L, S = a.st;
+    const own = (st, sub) => ({ n: sub.n, ak: sub.ak, an: sub.an, ok: sub.ok, on: sub.on, wk: sub.wk, avgTot: sub.avgTot, avgLine: sub.avgLine });
+    const hS = S.home.sp, hT = S.home.tot, aS = S.away.sp, aT = S.away.tot;
+    // 主隊/客隊:讓分用讓分相近的場次、大小用總分相近的場次分開呈現
+    const two = (title, sp, tot, spList, totList, who) => `<p><b>${title}</b></p>
+<p>讓分(盤口 ±2,${sp.n} 場):${who}${who === '主隊' ? '過盤' : '過盤'} ${who === '主隊' ? rate(sp.an - sp.ak, sp.an) : rate(sp.ak, sp.an)}${who === '主隊' ? `・主勝 ${rate(sp.n - sp.wk, sp.n)}` : `・客勝 ${rate(sp.wk, sp.n)}`}</p>
+<p>大小(總分 ±6,${tot.n} 場):大分 ${rate(tot.ok, tot.on)}・平均總分 ${tot.n ? tot.avgTot.toFixed(1) : '—'}(盤均 ${tot.n ? tot.avgLine.toFixed(1) : '—'},本場 ${g.tot})</p>
+${spList.length ? `<ul class="hl">${spList.slice(0, 5).map(histLine).join('')}</ul>` : ''}`;
+    return `<div class="det">
+${two(`① ${esc(g.hm)} 主場・相近盤口`, hS, hT, L.home.sp, L.home.tot, '主隊')}
+${two(`② ${esc(g.aw)} 客場・相近盤口`, aS, aT, L.away.sp, L.away.tot, '客隊')}
+${block(`③ 聯盟相近盤口(讓分 ±1、總分 ±4)`, S.lg, g.sp, g.tot, L.lg)}
+${block(`④ 同為週${WD[L.wd]}、開賽 ${esc(g.time)} 前後 90 分、讓分 ±4`, S.slot, g.sp, g.tot, L.slot)}
+<details class="note"><summary>ⓘ</summary><div class="hint">機率 = 四組比對的過盤/大分/勝率各自向 50% 收縮後加權平均(④ 權重一半)。運彩賠率約 1.7,要命中 59% 以上才不虧;回測顯示三個市場長期平均都還是虧,請當參考。</div></details></div>`;
   }
   function card(g, medal) {
     const an = analyses.get(g.id); let verdict = '', body = '';
     if (an) {
-      const a = an.a, b = an.best;
-      body = row('讓分', a.spread.A, a.spread.H, b, an.alt, g) + row('大小', a.total.O || a.total.A, a.total.U || a.total.H, b, an.alt, g) + (g.mlA && g.mlH ? row('不讓分', a.ml.A, a.ml.H, b, an.alt, g) : '');
-      verdict = b ? `<span class="tag">建議 ${keyText(b, g)} @${b.odds}</span>${an.alt ? `<span class="tag plain">另 ${keyText(an.alt, g)} @${an.alt.odds}</span>` : ''}<span class="tag plain">相近盤口 ${a.sim.n} 場</span>` : '<span class="tag skip">賠率偏低,不推薦</span>';
+      const a = an.a, b = an.best, tg = c => `${c.market} ${c.key === 'AM' ? '客' : c.key === 'HM' ? '主' : keyText(c, g)} @${c.odds}${c.odds < MIN_ODDS ? '(低賠)' : ''}`;
+      body = row('讓分', a.spread.A, a.spread.H, an, g) + row('大小', a.total.A, a.total.H, an, g) + (g.mlA && g.mlH ? row('不讓分', a.ml.A, a.ml.H, an, g) : '');
+      verdict = b ? `<span class="tag">建議 ${keyText(b, g)} @${b.odds}${an.low ? '・低賠僅參考' : ''}</span>` + an.per.filter(c => c.key !== b.key).map(c => `<span class="tag plain">${tg(c)}</span>`).join('') + `<span class="tag plain">相近盤口 ${a.sim.n} 場</span>` : '<span class="tag skip">缺少賠率</span>';
     } else body = '<div class="hint">缺少盤口資料</div>';
     const MED = [['gold', '金牌'], ['silver', '銀牌'], ['bronze', '銅牌']];
-    return `<article class="match${an && an.best ? ' pick' : ''}${medal != null ? ' medal ' + MED[medal][0] : ''}${openId === g.id ? ' open' : ''}" data-id="${esc(g.id)}">${badge(g, an && an.best)}${medal != null ? `<span class="mbadge">${MED[medal][1]} · 今日第 ${medal + 1} 名</span>` : ''}
+    return `<article class="match${an && an.best && !an.low ? ' pick' : ''}${medal != null ? ' medal ' + MED[medal][0] : ''}${openId === g.id ? ' open' : ''}" data-id="${esc(g.id)}">${badge(g, an && an.best)}${medal != null ? `<span class="mbadge">${MED[medal][1]} · 今日第 ${medal + 1} 名</span>` : ''}
 <div class="mt"><b>${esc(g.time)}</b><span>NBA</span></div>
 <div><div class="teams">${esc(g.aw)}<span class="at">@</span>${esc(g.hm)}</div>${body}<div class="verdict">${verdict}</div></div>${an ? detail(g, an) : ''}</article>`;
   }
@@ -121,9 +144,10 @@ body.nba #tab-matches > *:not(#nbaView){display:none!important}
     let list = games.filter(g => g.d === d).sort((a, b) => a.time < b.time ? -1 : a.time > b.time ? 1 : 0);
     let ranks = new Map();
     if (sortMode === 'best') {
-      const ranked = list.filter(g => analyses.get(g.id) && analyses.get(g.id).best && !g.sc).sort((x, y) => analyses.get(y.id).best.val - analyses.get(x.id).best.val);
+      const ranked = list.filter(g => analyses.get(g.id) && analyses.get(g.id).best && !analyses.get(g.id).low && !g.sc).sort((x, y) => analyses.get(y.id).best.val - analyses.get(x.id).best.val);
       ranked.forEach((g, i) => ranks.set(g.id, i));
-      list = ranked.concat(list.filter(g => !ranks.has(g.id)));
+      const lows = list.filter(g => !ranks.has(g.id) && analyses.get(g.id) && analyses.get(g.id).best && !g.sc).sort((x, y) => analyses.get(y.id).best.val - analyses.get(x.id).best.val);
+      list = ranked.concat(lows, list.filter(g => !ranks.has(g.id) && !lows.includes(g)));
     }
     $('nbaList').innerHTML = list.length ? list.map(g => card(g, ranks.has(g.id) && ranks.get(g.id) < 3 ? ranks.get(g.id) : null)).join('') : '<div class="empty"><div>這天沒有 NBA 賽事</div><div class="hint">賽事資料每 20 分鐘自動更新</div></div>';
     const upd = live && live.updated ? `更新 ${live.updated.slice(5, 16).replace('T', ' ')}` : '尚無即時賽事資料';

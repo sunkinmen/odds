@@ -188,7 +188,7 @@
       const lab = c => c.key === 'U' ? '小分' : c.key === 'O' ? '大分' : c.side;
       if (b) {
         cls = b.anom ? 'pick' : '';
-        verdict = `<span class="tag">建議 ${lab(b)} @${b.odds}${b.anom ? '・高機率' : ''}</span>${pb.alt ? `<span class="tag plain">另 ${lab(pb.alt)} @${pb.alt.odds}</span>` : ''}`;
+        verdict = `<span class="tag">建議 ${lab(b)} @${b.odds}${b.low ? '・低賠僅參考' : b.anom ? '・高機率' : ''}</span>${pb.alt ? `<span class="tag plain">另 ${lab(pb.alt)} @${pb.alt.odds}</span>` : ''}`;
         { const mv = OHT.movement(SNAPS, m, b.key); if (mv) verdict += `<span class="mv ${mv.pct < 0 ? 'dn' : 'up'}" title="賠率變動:${mv.open} → ${mv.now}(共 ${mv.n} 次紀錄)">${mv.pct < 0 ? '▼' : '▲'}${mv.open}→${mv.now}</span>`; }
         if (minLegOf(m) > 1) verdict += `<span class="tag plain">${minLegOf(m)}串起</span>`;
       } else { cls = 'skip'; verdict = `<span class="tag skip">賠率偏低,不推薦</span>`; }
@@ -211,7 +211,7 @@
   const EMPTY = '<div class="empty"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M3.5 9.5h17"/></svg><div>這天還沒有賽事</div><div class="hint">用上方「貼上匯入 / 連線抓取 / 手動新增」加入運彩賽事</div></div>';
   /* 排序:最佳=規則評等 A>B>C 再比扣水後期望值(前三名拿金銀銅);高賠=在達到最低賠率與機率的選項中,賠率最高者優先,同賠率比機率。沒有可建議選項的場次排在最後,依開賽時間。 */
   let sortMode = store.get('oh_sort', 'best');
-    function highPick(a) { const ok = [a.pb.t1, a.pb.t2].filter(c => c && c.odds >= cfg.minOdds && (c.conf || 0) >= 0.5).sort((x, y) => y.odds - x.odds || (y.conf - x.conf)); return ok[0] || null; }
+  function highPick(a) { const ok = [a.pb.t1, a.pb.t2].filter(c => c && c.odds >= cfg.minOdds && (c.conf || 0) >= 0.5).sort((x, y) => y.odds - x.odds || (y.conf - x.conf)); return ok[0] || null; }
   /* 最佳排序(鎖定邏輯):只排有建議的場次——先比「樣本少且高度集中」的層級(樣本<=15 且集中度>=85% 最前,再來 <=30 場且>=70%),
      同層級先看賠率組合是否集中在同一聯賽(同聯賽占全聯賽>=60%),再比集中度、樣本數少者在前。前三名拿金銀銅。 */
   function orderList(list) {
@@ -220,7 +220,7 @@
       const a = analyses.get(m.id); let s = null;
       if (a) {
         if (sortMode === 'high') { const h = highPick(a); if (h) { s = [-h.odds, -(h.conf || 0)]; info.set(m.id, h); } }
-        else if (a.pb.best) { const b = a.pb.best, cb = a.an.combo; s = b.anom ? [0, -b.score] : [3, -b.conf]; tiers.set(m.id, s[0]); }
+        else if (a.pb.best) { const b = a.pb.best, cb = a.an.combo; s = b.low ? [5, -b.conf] : b.anom ? [0, -b.score] : [3, -b.conf]; tiers.set(m.id, s[0]); }
       }
       (s ? keyed : rest).push({ m, s });
     });
