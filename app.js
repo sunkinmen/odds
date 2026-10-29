@@ -124,6 +124,17 @@
     const it = OHA.makeItem(m, an, pb, { minOdds: cfg.minOdds, minLegOf });
     return `<div class="sc3"><h4>解讀(規則式)<span class="gr ${it.grade}" style="margin-left:6px">${it.grade}</span></h4>${it.reasons.map(r => `<div class="hint" style="margin:3px 0">・${esc(r)}</div>`).join('')}${it.warns.map(r => `<div class="hint" style="margin:3px 0;color:var(--clay)">⚠ ${esc(r)}</div>`).join('')}</div>`;
   }
+  function cxHtml(m, a) {
+    const cb = a.an.combo, sl = a.an.slot; let h = '';
+    if (cb && cb.nLg >= 3) {
+      const parts = [];
+      if (cb.hda) parts.push(`${cb.hda.side}${cb.hda.side === '和' ? '' : '勝'} ${pct(cb.hda.share)}(${cb.hda.cnt}/${cb.nLg})`);
+      if (cb.ou) parts.push(`${cb.ou.side}分 ${pct(cb.ou.share)}(${cb.ou.cnt}/${cb.nLg})`);
+      h += `<div class="cx"><b>同聯賽同賠率(±${Math.round(cb.tol * 100)}%)</b> ${cb.nLg} 場,全聯賽 ${cb.nAll} 場:${parts.join('・')}</div>`;
+    } else h += `<div class="cx dim"><b>同聯賽同賠率</b>只有 ${cb ? cb.nLg : 0} 場,樣本不足;虛線改取市場熱門</div>`;
+    if (sl && sl.top.length && m.weekday != null) h += `<div class="cx"><b>同聯賽${WDN[m.weekday] || ''} ${esc(m.time || '')}±${sl.win}分</b> ${sl.n} 場,前三高比分:${sl.top.map(t => `客${t.a}:主${t.h}(${t.cnt})`).join('、')}</div>`;
+    return h;
+  }
   const MEDAL = [['gold', '金牌'], ['silver', '銀牌'], ['bronze', '銅牌']];
   function card(m, medal, rank, hp) {
     const a = analyses.get(m.id); let cls = '', verdict = '', det = '';
@@ -132,14 +143,15 @@
     else if (a) {
       const { an, pb } = a, b = pb.best; hit = b;
       const unk = [an.resolved.home, an.resolved.away].some(x => x.id < 0);
+      const lab = c => c.key === 'U' ? '小分' : c.key === 'O' ? '大分' : c.side;
       if (b) {
         cls = 'pick';
-        verdict = `<span class="tag">建議 ${(b.key === 'U' ? '小分' : b.key === 'O' ? '大分' : b.side)} @${b.odds}</span><span class="meter" title="機率 vs 市場"><i style="width:${b.p * 100}%"></i><b style="left:${b.pm * 100}%"></b></span><span>${pct(b.p)}</span>`;
-        verdict += `<span class="tag plain">期望 ${(b.ev * 100).toFixed(0)}%</span>`; { const mv = OHT.movement(SNAPS, m, b.key); if (mv) verdict += `<span class="mv ${mv.pct < 0 ? 'dn' : 'up'}" title="賠率變動:${mv.open} → ${mv.now}(共 ${mv.n} 次紀錄)。賠率下降代表市場資金看好該選項">${mv.pct < 0 ? '▼' : '▲'}${mv.open}→${mv.now}</span>`; } if (b.hist) verdict += `<span class="tag plain" title="歷史上同市場同賠率區間每注平均報酬">同區間歷史 ${(b.hist.roi * 100).toFixed(0)}%</span>`;
+        verdict = `<span class="tag">建議 ${lab(b)} @${b.odds}</span>`;
+        { const mv = OHT.movement(SNAPS, m, b.key); if (mv) verdict += `<span class="mv ${mv.pct < 0 ? 'dn' : 'up'}" title="賠率變動:${mv.open} → ${mv.now}(共 ${mv.n} 次紀錄)">${mv.pct < 0 ? '▼' : '▲'}${mv.open}→${mv.now}</span>`; }
         if (minLegOf(m) > 1) verdict += `<span class="tag plain">${minLegOf(m)}串起</span>`;
-      } else { cls = 'skip'; verdict = `<span class="tag skip">不推薦・沒有賠率≥${cfg.minOdds}且機率≥${pct(cfg.minProb)}的選項</span>`; }
+      } else { cls = 'skip'; verdict = `<span class="tag skip">無建議・同聯賽同賠率結果不夠集中(或賠率低於 ${cfg.minOdds})</span>`; }
+      verdict += cxHtml(m, a);
       (an.tail || []).filter(t => t.flag).forEach(t => { verdict += `<span class="tag flag" title="比分分布與大小盤估算">高比分 大${t.line} 偏高 ${pct(t.p)}(市場${pct(t.pm)}) @${t.odds}</span>`; });
-      if (an.anomaly.flag) { if (!b) cls = 'flag'; verdict += `<span class="tag flag">罕見組合 ${an.anomaly.n}場 ${pct(Math.max(...an.anomaly.c) / an.anomaly.n)}同向(${an.toHDA(an.anomaly.pick)})</span>`; }
       if (unk) verdict += '<span class="tag plain">部分隊名查無歷史</span>';
       det = `<div class="det"><div class="lg" style="margin-top:8px">強隊:${esc(an.strongName)} ・ 合併機率 勝${pct(an.p[0])} 和${pct(an.p[1])} 負${pct(an.p[2])}${an.pu ? ` ・ 小分${pct(an.pu.p)}${m.ov ? `・大分${pct(1 - an.pu.p)}` : ''}` : ''}</div>${layerBlock(an)}${scoreBlock(an, m, pb)}${ruleBlock(m, an, pb)}
         <div class="lg2"><span><s style="background:var(--sage)"></s>強隊勝</span><span><s style="background:var(--sand)"></s>和</span><span><s style="background:var(--clay)"></s>強隊負</span></div>
@@ -148,29 +160,32 @@
     }
     const pk = hit && hit.market === '勝平負' ? hit.side : null, pu = hit && hit.key === 'U', po = hit && hit.key === 'O';
     const ex = (a && a.an.resolved.league) || '';
-    const f1 = a ? a.pb.all.find(c => c.market === '勝平負') : null, f2 = a ? a.pb.all.find(c => c.key === 'U' || c.key === 'O') : null;   // 每場兩個市場各自期望值最高者(虛線框)
+    const f1 = a ? a.pb.t1 : null, f2 = a ? a.pb.t2 : null;   // 鎖定邏輯:每場兩個市場各自的最佳選項(虛線框),建議(實心)必為其中之一
     const fv = (cond) => cond ? ' fav' : '';
     return `<article class="match ${cls}${medal != null ? ' medal ' + MEDAL[medal][0] : ''}" data-id="${esc(m.id)}">${medal != null ? `<span class="mbadge">${MEDAL[medal][1]} · 今日第 ${medal + 1} 名</span>` : ''}
       <div class="mt"><b>${esc(m.time || '--:--')}</b><span>${esc(SHORT(m.league || ex))}</span>${rank != null ? `<i class="rk">#${rank + 1}</i>` : ''}</div>
       <div><div class="teams">${esc(m.away)}<span class="at">@</span>${esc(m.home)}</div>
         <div class="odds"><div class="o ${pk === '客' ? 'hit' : ''}${fv(f1 && f1.side === '客')}"><i>客</i>${m.oa}</div><div class="o ${pk === '和' ? 'hit' : ''}${fv(f1 && f1.side === '和')}"><i>和</i>${m.od}</div><div class="o ${pk === '主' ? 'hit' : ''}${fv(f1 && f1.side === '主')}"><i>主</i>${m.oh}</div>${m.ou ? `<div class="o u ${pu ? 'hit' : ''}${fv(f2 && f2.key === 'U')}"><i>小</i>${m.ou}</div>` : '<div></div>'}${m.ov ? `<div class="o u ${po ? 'hit' : ''}${fv(f2 && f2.key === 'O')}"><i>大</i>${m.ov}</div>` : '<div></div>'}</div>
-        <div class="verdict">${hp ? `<span class="tag">高賠首選 ${hp.key === 'U' ? '小分' : hp.key === 'O' ? '大分' : hp.side} @${hp.odds}・機率 ${pct(hp.p)}</span>` : ''}${verdict}</div></div>${det}</article>`;
+        <div class="verdict">${hp ? `<span class="tag">高賠首選 ${hp.key === 'U' ? '小分' : hp.key === 'O' ? '大分' : hp.side} @${hp.odds}${hp.cx && hp.cx.src === 'league' ? `・同聯賽 ${pct(hp.cx.share)}` : '・市場熱門'}</span>` : ''}${verdict}</div></div>${det}</article>`;
   }
   const EMPTY = '<div class="empty"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M3.5 9.5h17"/></svg><div>這天還沒有賽事</div><div class="hint">用上方「貼上匯入 / 連線抓取 / 手動新增」加入運彩賽事</div></div>';
   /* 排序:最佳=規則評等 A>B>C 再比扣水後期望值(前三名拿金銀銅);高賠=在達到最低賠率與機率的選項中,賠率最高者優先,同賠率比機率。沒有可建議選項的場次排在最後,依開賽時間。 */
   let sortMode = store.get('oh_sort', 'best');
-  function highPick(a) { const ok = a.pb.all.filter(c => c.odds >= cfg.minOdds && c.p >= cfg.minProb).sort((x, y) => y.odds - x.odds || y.p - x.p); return ok[0] || null; }
+  function highPick(a) { const ok = [a.pb.t1, a.pb.t2].filter(c => c && c.odds >= cfg.minOdds).sort((x, y) => y.odds - x.odds || ((y.cx ? y.cx.share : 0) - (x.cx ? x.cx.share : 0))); return ok[0] || null; }
+  /* 最佳排序(鎖定邏輯):只排有建議的場次——先比「樣本少且高度集中」的層級(樣本<=15 且集中度>=85% 最前,再來 <=30 場且>=70%),
+     同層級先看賠率組合是否集中在同一聯賽(同聯賽占全聯賽>=60%),再比集中度、樣本數少者在前。前三名拿金銀銅。 */
   function orderList(list) {
-    const gr = { A: 0, B: 1, C: 2 }, keyed = [], rest = [], info = new Map();
+    const keyed = [], rest = [], info = new Map();
     list.forEach(m => {
       const a = analyses.get(m.id); let s = null;
       if (a) {
-        if (sortMode === 'high') { const h = highPick(a); if (h) { s = [-h.odds, -h.p]; info.set(m.id, h); } }
-        else if (a.pb.best) { const it = OHA.makeItem(m, a.an, a.pb, { minOdds: cfg.minOdds, minLegOf }); s = [gr[it.grade], -a.pb.best.ev]; }
+        if (sortMode === 'high') { const h = highPick(a); if (h) { s = [-h.odds, -(h.cx ? h.cx.share : 0)]; info.set(m.id, h); } }
+        else if (a.pb.best) { const b = a.pb.best, cb = a.an.combo; s = [OH.tierOf(b.cx.n, b.cx.share), cb.lgShare >= 0.6 ? 0 : 1, -b.cx.share, b.cx.n]; }
       }
       (s ? keyed : rest).push({ m, s });
     });
-    keyed.sort((x, y) => x.s[0] - y.s[0] || x.s[1] - y.s[1] || byTime(x.m, y.m));
+    const cmp = (x, y) => { for (let i = 0; i < x.s.length; i++) if (x.s[i] !== y.s[i]) return x.s[i] - y.s[i]; return byTime(x.m, y.m); };
+    keyed.sort(cmp);
     rest.sort((x, y) => byTime(x.m, y.m));
     const ranks = new Map(); keyed.forEach((x, i) => ranks.set(x.m.id, i));
     return { list: keyed.concat(rest).map(x => x.m), ranks, info };
