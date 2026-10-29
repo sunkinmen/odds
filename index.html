@@ -164,7 +164,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 <div class="top">
   <div class="brand">
     <div class="mark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
-    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.22</small></div>
+    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.24</small></div>
   </div>
   <div class="days" id="days"></div>
 </div>
@@ -203,7 +203,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
   </div>
   <details class="note" hidden><summary>⚠ 先看回測結論</summary><p>用 2022–2023 預測 2025(6,000 場):相近賠率的歷史結果,並沒有比「直接選熱門」更準,長期 ROI 約 −15%;莊家抽水約 22%。這裡給的是歷史傾向,不是穩贏保證,請控制金額。</p></details>
   <div class="sortbar" id="sortBar"><span>排序</span><button data-m="best">最佳</button><button data-m="high">高賠</button></div>
-  <div class="hint" style="text-align:center;margin:6px 8px 0">異常篩選:同聯賽、同賠率組合只有 3–15 場且結果 ≥70% 同向才算異常,只有異常場次會有金銀銅與深色實心建議;虛線外框＝每場兩個市場各自最集中的選項(供有興趣的場次參考,沒有樣本就取市場熱門)。<br>回測(2026):此條件約每天 6 場、命中率約 50–57%,平均報酬仍約 −10~−14%;目前沒有證據證明能抓到協議球,請當篩選參考。</div>
+  <div class="hint" style="text-align:center;margin:6px 8px 0">異常篩選:相近賠率＝主、客賠率落在你的分段容許差內(1.x ±0.10、2.x ±0.15、3.x ±0.20、4.x ±0.30、5.x ±0.50、6+ ±1.00),和局以 0.25 分區:同區間=高度相符、相鄰=大致相符,程式先用高度、同聯賽不足 3 場才自動放寬。同聯賽相近賠率只有 3–15 場、且(貝氏收縮後的)結果機率 ≥70% 才算異常,3 場全中不再直接算 100%,只有異常場次會有金銀銅與深色實心建議;虛線外框＝每場兩個市場各自最集中的選項(供有興趣的場次參考,沒有樣本就取市場熱門)。<br>回測(2025 起、不偷看未來):收縮後的異常場次命中率約 73%(與市場預期相同),平均報酬約 −8~−10%,見「顧問」頁的策略實驗室;目前沒有證據證明能抓到協議球,請當篩選參考。</div>
   <div class="hint" id="anomMsg" style="text-align:center;margin:8px 8px 0;font-size:13px"></div>
   <div id="list"></div>
   <div class="hint" id="skipMsg" style="text-align:center"></div>
@@ -229,6 +229,8 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
   </div>
   <div class="sec">推薦紀錄與驗證</div>
   <div class="panel" id="logBox"></div>
+  <div class="sec">策略實驗室(滾動回測)</div>
+  <div class="panel" id="labBox"></div>
 </main>
 
 <main id="tab-set" class="wrap" style="display:none">
@@ -321,12 +323,13 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
   btns.forEach(function(b){b.addEventListener('click',function(){go(b.getAttribute('data-t'))})});
 })();
 </script>
-<script src="engine.js?v=322"></script>
-<script src="parlay.js?v=322"></script>
-<script src="advisor.js?v=322"></script>
-<script src="importer.js?v=322"></script>
-<script src="dataload.js?v=322"></script>
-<script src="track.js?v=322"></script>
-<script src="app.js?v=322"></script>
+<script src="model.js?v=324"></script>
+<script src="engine.js?v=324"></script>
+<script src="parlay.js?v=324"></script>
+<script src="advisor.js?v=324"></script>
+<script src="importer.js?v=324"></script>
+<script src="dataload.js?v=324"></script>
+<script src="track.js?v=324"></script>
+<script src="app.js?v=324"></script>
 </body>
 </html>
