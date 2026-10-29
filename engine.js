@@ -346,9 +346,19 @@
     if (!t1) t1 = cand.filter(c => c.market === '勝平負' && c.odds > 1).sort((a, b) => a.odds - b.odds)[0] || null;
     if (lg && cb.ou) { t2 = mk(cb.ou.key); if (t2) t2.cx = { share: cb.ou.shr ? cb.ou.shr.p : cb.ou.share, raw: cb.ou.share, cnt: cb.ou.cnt, n: cb.nLg, src: 'league' }; }
     if (!t2) { const U = mk('U'), O = mk('O'); t2 = U && O ? (an.pu.market >= 0.5 ? U : O) : (U || null); }
-    const ok = [t1, t2].filter(c => c && c.cx && c.cx.src === 'league' && c.cx.share >= ANOM.minShare && c.cx.n <= ANOM.maxN && c.odds >= (minOdds || 1.3));
-    ok.sort((a, b) => b.cx.share - a.cx.share || a.cx.n - b.cx.n);
-    return { all: cand, best: ok[0] || null, t1, t2 };
+    /* 每場一定給建議:勝平負(t1)與大小分(t2)各取最佳,再比「綜合機率×賠率」,較高者為建議(實心),另一個為備選。
+       綜合機率 = 校準模型、進球模型、同聯賽集中度(收縮後)三者平均。異常(anom)=同聯賽相近賠率 3~15 場且收縮後 >=70%。 */
+    const mp = an.rec && an.rec.model;
+    const confOf = c => {
+      const arr = [c.p];
+      if (mp) { if (c.key === 'H') arr.push(mp.p[0]); else if (c.key === 'D') arr.push(mp.p[1]); else if (c.key === 'A') arr.push(mp.p[2]); else if (c.key === 'U' && mp.pU != null) arr.push(mp.pU); else if (c.key === 'O' && mp.pU != null) arr.push(1 - mp.pU); }
+      if (c.cx && c.cx.src === 'league') arr.push(c.cx.share);
+      return arr.reduce((x, y) => x + y, 0) / arr.length;
+    };
+    const pick = [t1, t2].filter(Boolean);
+    pick.forEach(c => { c.conf = confOf(c); c.val = c.conf * c.odds; c.anom = !!(c.cx && c.cx.src === 'league' && c.cx.share >= ANOM.minShare && c.cx.n <= ANOM.maxN); });
+    pick.sort((x, y) => y.val - x.val);
+    return { all: cand, best: pick[0] || null, alt: pick[1] || null, t1, t2 };
   }
 
   const api = { load, analyze, mlProb, pickBest, resolveTeam, norm, MIN_N, histRoi, combo, slotScores, tierOf, ANOM, simSources, recScores, tolO, drawBand };
