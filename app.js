@@ -163,6 +163,21 @@
     return h + `<details class="note"><summary>ⓘ</summary><div class="hint">進球模型(預期進球 主${r.model.lh.toFixed(2)}・客${r.model.la.toFixed(2)})加歷史比分調整;純模型前三:${r.modelTop.map(x => scLab(x) + ' ' + (x.p * 100).toFixed(1) + '%').join('、')}</div></details></div>`;
   }
   const MEDAL = [['gold', '金牌'], ['silver', '銀牌'], ['bronze', '銅牌']];
+  /* ---- 賽事結果:按「賽事結果」從玩運彩抓已完賽比分,建議命中貼「贏」、沒中貼「輸」 ---- */
+  let RES = store.get('oh_res', {});
+  const resOf = m => RES[m.date + '|' + m.id] || null;
+  function judge(c, r) {
+    const ga = r[0], gh = r[1], t = ga + gh;
+    switch (c.key) { case 'H': return gh > ga; case 'D': return gh === ga; case 'A': return ga > gh; case 'U': return t <= 2; case 'O': return t >= 3; case 'O35': return t >= 4; case 'O45': return t >= 5; }
+    return null;
+  }
+  function resBadge(m, c) {
+    const r = resOf(m); if (!r) return '';
+    const sc = `<small>${r[0]}:${r[1]}</small>`, w = c ? judge(c, r) : null;
+    if (w === true) return `<span class="rb win" title="終場 客${r[0]}:主${r[1]}">✨ 贏 ${sc}</span>`;
+    if (w === false) return `<span class="rb lose" title="終場 客${r[0]}:主${r[1]}">輸 ${sc}</span>`;
+    return `<span class="rb none" title="終場 客${r[0]}:主${r[1]}">完賽 ${sc}</span>`;
+  }
   function card(m, medal, rank, hp) {
     const a = analyses.get(m.id); let cls = '', verdict = '', det = '';
     let hit = null;
@@ -187,7 +202,7 @@
     const ex = (a && a.an.resolved.league) || '';
     const f1 = a ? a.pb.t1 : null, f2 = a ? a.pb.t2 : null;   // 鎖定邏輯:每場兩個市場各自的最佳選項(虛線框),建議(實心)必為其中之一
     const fv = (cond) => cond ? ' fav' : '';
-    return `<article class="match ${cls}${medal != null ? ' medal ' + MEDAL[medal][0] : ''}" data-id="${esc(m.id)}">${medal != null ? `<span class="mbadge">${MEDAL[medal][1]} · 今日第 ${medal + 1} 名</span>` : ''}
+    return `<article class="match ${cls}${medal != null ? ' medal ' + MEDAL[medal][0] : ''}" data-id="${esc(m.id)}">${resBadge(m, hit)}${medal != null ? `<span class="mbadge">${MEDAL[medal][1]} · 今日第 ${medal + 1} 名</span>` : ''}
       <div class="mt"><b>${esc(m.time || '--:--')}</b><span>${esc(SHORT(m.league || ex))}</span>${rank != null ? `<i class="rk">#${rank + 1}</i>` : ''}</div>
       <div><div class="teams">${esc(m.away)}<span class="at">@</span>${esc(m.home)}</div>
         <div class="odds"><div class="o ${pk === '客' ? 'hit' : ''}${fv(f1 && f1.side === '客')}"><i>客</i>${m.oa}</div><div class="o ${pk === '和' ? 'hit' : ''}${fv(f1 && f1.side === '和')}"><i>和</i>${m.od}</div><div class="o ${pk === '主' ? 'hit' : ''}${fv(f1 && f1.side === '主')}"><i>主</i>${m.oh}</div>${m.ou ? `<div class="o u ${pu ? 'hit' : ''}${fv(f2 && f2.key === 'U')}"><i>小</i>${m.ou}</div>` : '<div></div>'}${m.ov ? `<div class="o u ${po ? 'hit' : ''}${fv(f2 && f2.key === 'O')}"><i>大</i>${m.ov}</div>` : '<div></div>'}</div>
@@ -608,6 +623,22 @@
     } catch (e) { $('impMsg').textContent = '自動更新失敗:' + e.message; }
   }
   $('bSync').onclick = () => sync(false);
+  $('bRes').onclick = async () => {
+    if (!proxy) { $('impMsg').textContent = '尚未設定 Worker 網址(設定頁)'; return; }
+    $('impMsg').textContent = '抓取賽果中…';
+    try {
+      let n = 0, tot = 0;
+      for (const d of days()) {
+        const r = await fetch(proxy + (proxy.includes('?') ? '&' : '?') + 'd=' + gtOf(d)); if (!r.ok) throw new Error('HTTP ' + r.status);
+        const rows = OHI.fromPlaysport(await r.text(), gtOf(d)); tot += rows.length;
+        rows.forEach(x => { if (x[11]) { RES[d + '|' + x[0]] = x[11]; n++; } });
+      }
+      const ks = Object.keys(RES); if (ks.length > 600) ks.sort().slice(0, ks.length - 600).forEach(k => delete RES[k]);
+      store.set('oh_res', RES); render();
+      $('impMsg').textContent = n ? `已更新 ${n} 場賽果` : '目前還沒有完賽的賽事';
+    } catch (e) { $('impMsg').textContent = '抓取賽果失敗:' + e.message; }
+  };
+
   $('sProxySave').onclick = () => { proxy = $('sProxy').value.trim(); store.set('oh_proxy', proxy); sync(false); };
 
   // ---------- 補充歷史賽果 ----------
