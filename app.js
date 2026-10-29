@@ -114,7 +114,7 @@
       const v = valInfo(c, an), best = c === bestC;
       return `<div class="opt ${on ? 'on' : ''} ${c.ev >= 0 ? 'pos' : ''}" data-k="${c.key}"><span><b>${lab}</b> @${c.odds}${best ? ' <em class="tag">水位後最划算</em>' : ''}</span><span>模型 ${pct(c.p)} <span class="s2">/ 打平線 ${pct(v.be)}</span></span><div class="vbar"><i class="be" style="left:${Math.min(100, v.be * 100)}%"></i><i class="pp" style="width:${Math.min(100, c.p * 100)}%"></i></div><small>每投 100 元平均拿回 <b class="ev">${(100 * (1 + c.ev)).toFixed(0)} 元</b>(${v.evTxt}) ・ 市場認為 ${pct(c.pm)},模型${v.edgeTxt}${c.hist ? ` ・ 同區間歷史報酬 ${(c.hist.roi * 100).toFixed(0)}%` : ''}${on ? ' ・ 已加入' : ''}</small></div>`;
     }).join('');
-    return h + '<div class="hint">打平線＝1÷賠率(命中率要超過它才不虧);運彩抽水(約 23%)讓多數選項低於 100 元。模型機率已用機器學習校準(2026 樣本外比單純看賠率準,但準確度提升不等於會賺)。比的是「哪個損失最小/優勢最明顯」,回測顯示模型沒有穩定勝過市場,請當作歷史傾向而非保證。</div></div>';
+    return h + '<details class="note"><summary>ⓘ</summary><div class="hint">打平線＝1÷賠率,命中率要超過它才不虧;運彩抽水約 23%,多數選項期望值為負。</div></details></div>';
   }
   function scoreBlock(an, m, pb) {
     const S = an.scoreSum; let h = '<div class="sc3"><h4>⑤ 綜整:最可能的三個比分</h4>';
@@ -140,11 +140,11 @@
     const cb = a.an.combo, sl = a.an.slot; let h = '';
     if (cb && cb.nLg >= 3) {
       const parts = [], sp = x => x.shr ? x.shr.p : x.share;
-      if (cb.hda) parts.push(`${cb.hda.side}${cb.hda.side === '和' ? '' : '勝'} ${pct(sp(cb.hda))}(${cb.hda.cnt}/${cb.nLg})`);
-      if (cb.ou) parts.push(`${cb.ou.side}分 ${pct(sp(cb.ou))}(${cb.ou.cnt}/${cb.nLg})`);
-      h += `<div class="cx"><b>同聯賽主客賠率${cb.lvlTxt}</b>(${cb.tolTxt}) ${cb.nLg} 場,全聯賽 ${cb.nAll} 場:${parts.join('・')}<span class="dim">(百分比已做貝氏收縮,括號為原始次數)</span></div>`;
-    } else h += `<div class="cx dim"><b>同聯賽主客賠率相近</b>只有 ${cb ? cb.nLg : 0} 場,樣本不足;虛線改取市場熱門</div>`;
-    if (sl && sl.top.length && m.weekday != null) h += `<div class="cx"><b>同聯賽${WDN[m.weekday] || ''} ${esc(m.time || '')}±${sl.win}分</b> ${sl.n} 場,前三高比分:${sl.top.map(t => `客${t.a}:主${t.h}(${t.cnt})`).join('、')}</div>`;
+      if (cb.hda) parts.push(`${cb.hda.side}${cb.hda.side === '和' ? '' : '勝'} ${pct(sp(cb.hda))}`);
+      if (cb.ou) parts.push(`${cb.ou.side}分 ${pct(sp(cb.ou))}`);
+      h += `<div class="cx"><b>同聯賽相近賠率</b> ${cb.nLg} 場:${parts.join('・')}</div>`;
+    }
+    if (sl && sl.top.length && m.weekday != null) h += `<div class="cx"><b>同時段</b> ${sl.n} 場,前三比分:${sl.top.map(t => `客${t.a}:主${t.h}(${t.cnt})`).join('、')}</div>`;
     return h;
   }
   /* ---- 點開後:三組相近賠率常見比分 + 綜整推薦前三 ---- */
@@ -152,8 +152,7 @@
   function srcBlock(title, s, tail) {
     let h = `<div class="sc3"><h4>${title}</h4>`;
     if (!s || !s.n) return h + '<div class="hint">相近賠率下沒有歷史場次。</div></div>';
-    const lv = s.lvl === 0 ? '高度相符' : '大致相符';
-    h += `<div class="hint" style="margin:0 0 4px">相近賠率(${lv})${s.win ? `・開賽時間 ±${s.win} 分` : ''}・共 ${s.n} 場${s.n < 3 ? ' <b style="color:var(--clay)">(樣本不足 3 場,僅供參考)</b>' : ''}</div>`;
+    h += `<div class="hint" style="margin:0 0 4px">${s.lvl === 0 ? '高度相符' : '大致相符'}${s.win ? `・±${s.win}分` : ''}・${s.n} 場${s.n < 3 ? '(樣本少)' : ''}</div>`;
     h += s.top.map(x => `<div class="scr"><b>${scLab(x)}</b><div class="bar"><i style="width:${Math.min(100, x.cnt / s.n * 100)}%"></i></div><span>${x.cnt} 次</span><small>${pct(x.cnt / s.n)}</small></div>`).join('');
     return h + (tail || '') + '</div>';
   }
@@ -161,11 +160,7 @@
     const r = a.an.rec; if (!r) return '';
     let h = '<div class="sc3 rec"><h4>綜整推薦比分前三名</h4>';
     h += r.top.map((x, i) => `<div class="scr"><b>${i + 1}. ${scLab(x)}</b><div class="bar"><i style="width:${Math.min(100, x.p * 100 * 4)}%"></i></div><span>${(x.p * 100).toFixed(1)}%</span></div>`).join('');
-    h += `<div class="hint">做法:先用市場賠率反推兩隊預期進球(主 ${r.model.lh.toFixed(2)}・客 ${r.model.la.toFixed(2)})算出每個比分的機率,再把上面三組歷史比分當作證據小幅調整。`;
-    h += `<br>純模型的前三名:${r.modelTop.map(x => scLab(x) + ' ' + (x.p * 100).toFixed(1) + '%').join('、')}。`;
-    const lb = LAB && LAB.rows ? LAB.rows.find(x => x.id.indexOf('進球模型 vs 綜整') === 0 && x.id.endsWith('其他')) : null;
-    h += lb ? `<br>回測(2025 起,${lb.n.toLocaleString()} 場):進球模型前三名命中 ${pct(lb.ref)},加入歷史比分後 ${pct(lb.hit)};單看某一組歷史前三約只有 20%。` : '';
-    return h + '單一比分的機率本來就低(最高約 10~20%),前三名合計命中約三分之一。</div></div>';
+    return h + `<details class="note"><summary>ⓘ</summary><div class="hint">進球模型(預期進球 主${r.model.lh.toFixed(2)}・客${r.model.la.toFixed(2)})加歷史比分調整;純模型前三:${r.modelTop.map(x => scLab(x) + ' ' + (x.p * 100).toFixed(1) + '%').join('、')}</div></details></div>`;
   }
   const MEDAL = [['gold', '金牌'], ['silver', '銀牌'], ['bronze', '銅牌']];
   function card(m, medal, rank, hp) {
@@ -177,16 +172,15 @@
       const unk = [an.resolved.home, an.resolved.away].some(x => x.id < 0);
       const lab = c => c.key === 'U' ? '小分' : c.key === 'O' ? '大分' : c.side;
       if (b) {
-        cls = 'pick';
-        verdict = `<span class="tag">建議 ${lab(b)} @${b.odds}</span>`;
+        cls = b.anom ? 'pick' : '';
+        verdict = `<span class="tag">建議 ${lab(b)} @${b.odds}${b.anom ? '・異常' : ''}</span>${pb.alt ? `<span class="tag plain">另 ${lab(pb.alt)} @${pb.alt.odds}</span>` : ''}`;
         { const mv = OHT.movement(SNAPS, m, b.key); if (mv) verdict += `<span class="mv ${mv.pct < 0 ? 'dn' : 'up'}" title="賠率變動:${mv.open} → ${mv.now}(共 ${mv.n} 次紀錄)">${mv.pct < 0 ? '▼' : '▲'}${mv.open}→${mv.now}</span>`; }
         if (minLegOf(m) > 1) verdict += `<span class="tag plain">${minLegOf(m)}串起</span>`;
-        verdict += labTag(an, b);
-      } else { cls = 'skip'; verdict = `<span class="tag skip">常態・不建議(同聯賽同賠率樣本不在 3–15 場、結果未達 70% 集中,或賠率低於 ${cfg.minOdds})</span>`; }
+      }
       verdict += cxHtml(m, a);
       (an.tail || []).filter(t => t.flag).forEach(t => { verdict += `<span class="tag flag" title="比分分布與大小盤估算">高比分 大${t.line} 偏高 ${pct(t.p)}(市場${pct(t.pm)}) @${t.odds}</span>`; });
       if (unk) verdict += '<span class="tag plain">部分隊名查無歷史</span>';
-      det = `<div class="det">${srcBlock(`① ${esc(m.home)} 主場・同聯賽相近賠率常見比分`, an.rec && an.rec.src.home)}${srcBlock(`② ${esc(m.away)} 客場・同聯賽相近賠率常見比分`, an.rec && an.rec.src.away)}${srcBlock(`③ 同聯賽所有球隊・${WDN[m.weekday] || ''} ${esc(m.time || '')} 前後相近賠率常見比分`, an.rec && an.rec.src.slot)}${recBlock(a)}${optBlock(an, m, pb)}
+      det = `<div class="det">${srcBlock(`① ${esc(m.home)} 主場常見比分`, an.rec && an.rec.src.home)}${srcBlock(`② ${esc(m.away)} 客場常見比分`, an.rec && an.rec.src.away)}${srcBlock(`③ 同聯賽同時段(${WDN[m.weekday] || ''} ${esc(m.time || '')})常見比分`, an.rec && an.rec.src.slot)}${recBlock(a)}${optBlock(an, m, pb)}
         <div class="row" style="margin:8px 0 2px"><span class="hint" style="margin:0 0 0 6px">最低串數</span><select class="ml" style="width:auto;padding:6px 10px">${[0, 2, 3, 4, 5].map(v => `<option value="${v}" ${(m.minLeg || 0) === v ? 'selected' : ''}>${v ? v + ' 串起' : '依規則'}</option>`).join('')}</select><span class="grow"></span><button class="btn line sm del">刪除</button></div></div>`;
     }
     const pk = hit && hit.market === '勝平負' ? hit.side : null, pu = hit && hit.key === 'U', po = hit && hit.key === 'O';
@@ -202,16 +196,16 @@
   const EMPTY = '<div class="empty"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M3.5 9.5h17"/></svg><div>這天還沒有賽事</div><div class="hint">用上方「貼上匯入 / 連線抓取 / 手動新增」加入運彩賽事</div></div>';
   /* 排序:最佳=規則評等 A>B>C 再比扣水後期望值(前三名拿金銀銅);高賠=在達到最低賠率與機率的選項中,賠率最高者優先,同賠率比機率。沒有可建議選項的場次排在最後,依開賽時間。 */
   let sortMode = store.get('oh_sort', 'best');
-  function highPick(a) { const ok = [a.pb.t1, a.pb.t2].filter(c => c && c.cx && c.cx.src === 'league' && c.cx.n <= OH.ANOM.maxN && c.cx.share >= OH.ANOM.minShare && c.odds >= cfg.minOdds).sort((x, y) => y.odds - x.odds || ((y.cx ? y.cx.share : 0) - (x.cx ? x.cx.share : 0))); return ok[0] || null; }
+    function highPick(a) { const ok = [a.pb.t1, a.pb.t2].filter(c => c && c.odds >= cfg.minOdds && (c.conf || 0) >= 0.5).sort((x, y) => y.odds - x.odds || (y.conf - x.conf)); return ok[0] || null; }
   /* 最佳排序(鎖定邏輯):只排有建議的場次——先比「樣本少且高度集中」的層級(樣本<=15 且集中度>=85% 最前,再來 <=30 場且>=70%),
      同層級先看賠率組合是否集中在同一聯賽(同聯賽占全聯賽>=60%),再比集中度、樣本數少者在前。前三名拿金銀銅。 */
   function orderList(list) {
-    const keyed = [], rest = [], info = new Map();
+    const keyed = [], rest = [], info = new Map(), tiers = new Map();
     list.forEach(m => {
       const a = analyses.get(m.id); let s = null;
       if (a) {
-        if (sortMode === 'high') { const h = highPick(a); if (h) { s = [-h.odds, -(h.cx ? h.cx.share : 0)]; info.set(m.id, h); } }
-        else if (a.pb.best) { const b = a.pb.best, cb = a.an.combo; s = [OH.tierOf(b.cx.n, b.cx.share), cb.lgShare >= 0.6 ? 0 : 1, -b.cx.share, b.cx.n]; }
+        if (sortMode === 'high') { const h = highPick(a); if (h) { s = [-h.odds, -(h.conf || 0)]; info.set(m.id, h); } }
+        else if (a.pb.best) { const b = a.pb.best, cb = a.an.combo; s = b.cx ? [OH.tierOf(b.cx.n, b.cx.share), cb.lgShare >= 0.6 ? 0 : 1, -b.cx.share, b.cx.n] : [3, 1, -b.conf, 0]; tiers.set(m.id, s[0]); }
       }
       (s ? keyed : rest).push({ m, s });
     });
@@ -219,15 +213,15 @@
     keyed.sort(cmp);
     rest.sort((x, y) => byTime(x.m, y.m));
     const ranks = new Map(); keyed.forEach((x, i) => ranks.set(x.m.id, i));
-    return { list: keyed.concat(rest).map(x => x.m), ranks, info };
+    return { list: keyed.concat(rest).map(x => x.m), ranks, info, tiers };
   }
   function render() {
     prune(); analyzeAll(); renderDays();
     const d = days()[activeDay]; let list = matches.filter(m => m.date === d).sort(byTime);
     const od = orderList(list); list = od.list;
     document.querySelectorAll('#sortBar button').forEach(b => b.classList.toggle('on', b.dataset.m === sortMode));
-    $('list').innerHTML = list.length ? list.map(m => { const r = od.ranks.get(m.id); return card(m, sortMode === 'best' && r != null && r < 3 ? r : null, r, od.info.get(m.id)); }).join('') : EMPTY;
-    { const na = list.filter(m => { const a = analyses.get(m.id); return a && a.pb.best; }).length; $('anomMsg').innerHTML = list.length ? (na ? `今日異常 <b>${na}</b> 場(共 ${list.length} 場)・其餘為常態分布,不建議` : `今日無異常:${list.length} 場都不符合「同聯賽同賠率 3–15 場且結果 ≥70% 集中」,不建議下注`) : ''; }
+    $('list').innerHTML = list.length ? list.map(m => { const r = od.ranks.get(m.id); return card(m, sortMode === 'best' && r != null && r < 3 && (od.tiers.get(m.id) <= 1) ? r : null, r, od.info.get(m.id)); }).join('') : EMPTY;
+    $('anomMsg').innerHTML = '';
     const other = matches.filter(m => !inDays(m)).length;
     $('skipMsg').textContent = other ? `另有 ${other} 場今明兩天以外的賽事已略過(後天的賽事通常還沒開賣)` : '';
     renderScope(); renderMine(); renderParlay();
@@ -733,7 +727,7 @@
   function riskHtml(p, st) {
     const M = window.OHM; if (!M || !budget) return '';
     const singles = p.singles.map(s => { const c = candOf(s.id, s.k), i = itOf(s.id); return { s, c, i }; }).filter(x => x.c);
-    let h = '<div class="plan"><h4>資金管理(分數凱利 1/4・單注上限 5%)</h4>';
+    let h = '<details class="note"><summary>ⓘ 資金管理</summary><div class="plan">';
     if (singles.length) {
       h += singles.map(x => { const f = M.kelly(x.c.p, x.c.odds, { frac: 0.25, cap: 0.05, pSd: 0.05 }), fm = M.kelly(x.c.pm, x.c.odds, { frac: 0.25, cap: 0.05 });
         return `<div class="pl"><span>${esc(x.i.label)}<br><b>${OHA.LAB[x.s.k]}</b> @${x.c.odds}</span><b>${f > 0 ? Math.round(f * budget / 10) * 10 + ' 元' : '0 元'}<br><small class="s2">${f > 0 ? '占預算 ' + (f * 100).toFixed(1) + '%' : '期望值為負,凱利不建議'}${fm <= 0 && f > 0 ? '・以市場機率算仍為負' : ''}</small></b></div>`; }).join('');
@@ -745,7 +739,7 @@
       const L = p.parlay.legs.map(l => { const c = candOf(l.id, l.k); return c ? { odds: c.odds, p: c.p, pm: c.pm } : null; }).filter(Boolean);
       if (L.length >= 2) { const r = M.parlay(L); h += `<div class="rs" style="margin-top:6px">串關抽水疊加:${L.length} 場全中的有效抽水約 <b>${(r.margin * 100).toFixed(0)}%</b>(單場約 ${(Math.min(...L.map(l => 1 - l.pm * l.odds)) * 100).toFixed(0)}~${(Math.max(...L.map(l => 1 - l.pm * l.odds)) * 100).toFixed(0)}%);各腿抽水相乘,所以多數情況單場的期望虧損比串關小,串關靠的是波動(低機率高報酬),不是優勢。</div>`; }
     }
-    return h + '<div class="hint">凱利只在「你相信自己的機率比賠率隱含的更準」時才有意義;回測顯示模型沒有穩定勝過市場,所以多數選項凱利給 0 是正常結果,不是程式出錯。</div></div>';
+    return h + '</div></details>';
   }
   fetch('data/lab.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).then(j => { if (j && j.rows) { LAB = j; renderLab(); render(); } }).catch(() => { });
 
