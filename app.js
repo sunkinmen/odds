@@ -149,7 +149,7 @@
         verdict = `<span class="tag">建議 ${lab(b)} @${b.odds}</span>`;
         { const mv = OHT.movement(SNAPS, m, b.key); if (mv) verdict += `<span class="mv ${mv.pct < 0 ? 'dn' : 'up'}" title="賠率變動:${mv.open} → ${mv.now}(共 ${mv.n} 次紀錄)">${mv.pct < 0 ? '▼' : '▲'}${mv.open}→${mv.now}</span>`; }
         if (minLegOf(m) > 1) verdict += `<span class="tag plain">${minLegOf(m)}串起</span>`;
-      } else { cls = 'skip'; verdict = `<span class="tag skip">無建議・同聯賽同賠率結果不夠集中(或賠率低於 ${cfg.minOdds})</span>`; }
+      } else { cls = 'skip'; verdict = `<span class="tag skip">常態・不建議(同聯賽同賠率樣本不在 3–15 場、結果未達 70% 集中,或賠率低於 ${cfg.minOdds})</span>`; }
       verdict += cxHtml(m, a);
       (an.tail || []).filter(t => t.flag).forEach(t => { verdict += `<span class="tag flag" title="比分分布與大小盤估算">高比分 大${t.line} 偏高 ${pct(t.p)}(市場${pct(t.pm)}) @${t.odds}</span>`; });
       if (unk) verdict += '<span class="tag plain">部分隊名查無歷史</span>';
@@ -171,7 +171,7 @@
   const EMPTY = '<div class="empty"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M3.5 9.5h17"/></svg><div>這天還沒有賽事</div><div class="hint">用上方「貼上匯入 / 連線抓取 / 手動新增」加入運彩賽事</div></div>';
   /* 排序:最佳=規則評等 A>B>C 再比扣水後期望值(前三名拿金銀銅);高賠=在達到最低賠率與機率的選項中,賠率最高者優先,同賠率比機率。沒有可建議選項的場次排在最後,依開賽時間。 */
   let sortMode = store.get('oh_sort', 'best');
-  function highPick(a) { const ok = [a.pb.t1, a.pb.t2].filter(c => c && c.odds >= cfg.minOdds).sort((x, y) => y.odds - x.odds || ((y.cx ? y.cx.share : 0) - (x.cx ? x.cx.share : 0))); return ok[0] || null; }
+  function highPick(a) { const ok = [a.pb.t1, a.pb.t2].filter(c => c && c.cx && c.cx.src === 'league' && c.cx.n <= OH.ANOM.maxN && c.cx.share >= OH.ANOM.minShare && c.odds >= cfg.minOdds).sort((x, y) => y.odds - x.odds || ((y.cx ? y.cx.share : 0) - (x.cx ? x.cx.share : 0))); return ok[0] || null; }
   /* 最佳排序(鎖定邏輯):只排有建議的場次——先比「樣本少且高度集中」的層級(樣本<=15 且集中度>=85% 最前,再來 <=30 場且>=70%),
      同層級先看賠率組合是否集中在同一聯賽(同聯賽占全聯賽>=60%),再比集中度、樣本數少者在前。前三名拿金銀銅。 */
   function orderList(list) {
@@ -196,6 +196,7 @@
     const od = orderList(list); list = od.list;
     document.querySelectorAll('#sortBar button').forEach(b => b.classList.toggle('on', b.dataset.m === sortMode));
     $('list').innerHTML = list.length ? list.map(m => { const r = od.ranks.get(m.id); return card(m, sortMode === 'best' && r != null && r < 3 ? r : null, r, od.info.get(m.id)); }).join('') : EMPTY;
+    { const na = list.filter(m => { const a = analyses.get(m.id); return a && a.pb.best; }).length; $('anomMsg').innerHTML = list.length ? (na ? `今日異常 <b>${na}</b> 場(共 ${list.length} 場)・其餘為常態分布,不建議` : `今日無異常:${list.length} 場都不符合「同聯賽同賠率 3–15 場且結果 ≥70% 集中」,不建議下注`) : ''; }
     const other = matches.filter(m => !inDays(m)).length;
     $('skipMsg').textContent = other ? `另有 ${other} 場今明兩天以外的賽事已略過(後天的賽事通常還沒開賣)` : '';
     renderScope(); renderMine(); renderParlay();
