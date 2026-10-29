@@ -360,10 +360,14 @@
     /* v3.22 邏輯:異常(同聯賽 3~15 場、收縮後>=70%)優先、集中度高者先;低賠(< minOdds)一律不推薦。
        非異常場次:在所有 >= minOdds 的選項中取「綜合機率×賠率」最高者(不再被市場熱門低賠綁住)。 */
     const mo = minOdds || 1.6;
+    /* 一致性:每個市場只會出現一個方向(虛線框=建議候選),不會再「推主又推客」。
+       有同聯賽相近賠率樣本 → 方向以歷史集中度為準;沒有 → 在 >= minOdds 的選項裡取「綜合機率×賠率」最高者。 */
+    if (!(lg && cb.hda)) { const hs = cand.filter(c => c.market === '勝平負' && c.odds >= mo); hs.forEach(c => { c.conf = confOf(c); }); hs.sort((x, y) => y.conf * y.odds - x.conf * x.odds); if (hs[0]) t1 = hs[0]; }
+    if (!(lg && cb.ou)) { const us = cand.filter(c => (c.key === 'U' || c.key === 'O') && c.odds >= mo); us.forEach(c => { c.conf = confOf(c); }); us.sort((x, y) => y.conf * y.odds - x.conf * x.odds); if (us[0]) t2 = us[0]; }
     cand.forEach(c => { c.conf = confOf(c); c.val = c.conf * c.odds; const hd = c.market === '勝平負'; c.anom = !!(c.cx && c.cx.src === 'league' && c.cx.n >= THR.minN && c.cx.raw >= (hd ? THR.hda : THR.ou)); c.score = c.anom ? (hd ? 0.60 + (c.cx.raw - THR.hda) * 0.35 : 0.55 + (c.cx.raw - THR.ou) * 0.25) : 0; });
-    const pick = cand.filter(c => c.odds >= mo && c.conf >= 0.3);
+    const pick = [t1, t2].filter(c => c && c.odds >= mo && c.conf >= 0.3);
     pick.sort((x, y) => (y.anom - x.anom) || (y.score - x.score) || y.val - x.val);
-    const first = pick[0] || null, second = first ? pick.find(c => c.market !== first.market) || pick[1] || null : null;
+    const first = pick[0] || null, second = first ? pick.find(c => c !== first) || null : null;
     return { all: cand, best: first, alt: second, t1, t2 };
   }
 
