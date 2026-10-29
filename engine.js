@@ -152,7 +152,9 @@
      自動分級:同聯賽「高度相符」>=3 場就用高度;不足才放寬到「含大致相符」。 */
   const tolO = o => o < 2 ? 0.10 : o < 3 ? 0.15 : o < 4 ? 0.20 : o < 5 ? 0.30 : o < 6 ? 0.50 : 1.00;
   const drawBand = o => Math.floor((o - 3) / 0.25 + 1e-6);
-  const ANOM = { maxN: 15, minShare: 0.7 };   // 異常篩選:同聯賽同賠率組合樣本 3~15 場,且結果(勝平負或大小分)>=70% 同向
+  const ANOM = { maxN: 15, minShare: 0.7 };
+  /* 回測(2024 起滾動、不偷看未來):勝平負同聯賽相近賠率集中度 >=70% 命中率明顯拉高(約 60%,全體 47%);大小分要 >=80% 才明顯(約 57%,全體 52.5%)。金銀銅由此開始排。 */
+  const THR = { hda: 0.70, ou: 0.80, minN: 3 };   // 異常篩選:同聯賽同賠率組合樣本 3~15 場,且結果(勝平負或大小分)>=70% 同向
   function comboScan(db, m, L, asOf) {
     const th = tolO(m.oh) + 1e-4, ta = tolO(m.oa) + 1e-4, bd = drawBand(m.od);
     const lv = [{ nAll: 0, nLg: 0, c: [0, 0, 0], under: 0, over: 0 }, { nAll: 0, nLg: 0, c: [0, 0, 0], under: 0, over: 0 }];
@@ -358,13 +360,13 @@
     /* v3.22 邏輯:異常(同聯賽 3~15 場、收縮後>=70%)優先、集中度高者先;低賠(< minOdds)一律不推薦。
        非異常場次:在所有 >= minOdds 的選項中取「綜合機率×賠率」最高者(不再被市場熱門低賠綁住)。 */
     const mo = minOdds || 1.6;
-    cand.forEach(c => { c.conf = confOf(c); c.val = c.conf * c.odds; c.anom = !!(c.cx && c.cx.src === 'league' && c.cx.share >= ANOM.minShare && c.cx.n <= ANOM.maxN); });
+    cand.forEach(c => { c.conf = confOf(c); c.val = c.conf * c.odds; const hd = c.market === '勝平負'; c.anom = !!(c.cx && c.cx.src === 'league' && c.cx.n >= THR.minN && c.cx.raw >= (hd ? THR.hda : THR.ou)); c.score = c.anom ? (hd ? 0.60 + (c.cx.raw - THR.hda) * 0.35 : 0.55 + (c.cx.raw - THR.ou) * 0.25) : 0; });
     const pick = cand.filter(c => c.odds >= mo && c.conf >= 0.3);
-    pick.sort((x, y) => (y.anom - x.anom) || (x.anom && y.anom ? (y.cx.share - x.cx.share || x.cx.n - y.cx.n) : 0) || y.val - x.val);
+    pick.sort((x, y) => (y.anom - x.anom) || (y.score - x.score) || y.val - x.val);
     const first = pick[0] || null, second = first ? pick.find(c => c.market !== first.market) || pick[1] || null : null;
     return { all: cand, best: first, alt: second, t1, t2 };
   }
 
-  const api = { load, analyze, mlProb, pickBest, resolveTeam, norm, MIN_N, histRoi, combo, slotScores, tierOf, ANOM, simSources, recScores, tolO, drawBand };
+  const api = { load, analyze, mlProb, pickBest, resolveTeam, norm, MIN_N, histRoi, combo, slotScores, tierOf, ANOM, THR, simSources, recScores, tolO, drawBand };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OH = api;
 })(typeof self !== 'undefined' ? self : this);
