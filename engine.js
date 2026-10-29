@@ -146,30 +146,41 @@
   }
 
 
-  /* ---- 鎖定邏輯 v1:同聯賽同賠率組合的「結果集中度」 ----
-     組合 = 主/和/客三個賠率都在 ±tol 內(先 3%,同聯賽不足 3 場才放寬到 5%、8%)。
-     集中度 = 同聯賽組合內,最多人出現的 主/和/客 結果占比,以及 小分(<=2球)/大分(>=3球) 占比。 */
-  const COMBO_TOL = [0.03, 0.05, 0.08];
+  /* ---- 鎖定邏輯 v2:以「主賠、客賠」為鍵的相近賠率(使用者手動規則自動化) ----
+     主/客賠率容許差(絕對值):1.x ±0.10、2.x ±0.15、3.x ±0.20、4.x ±0.30、5.x ±0.50、6 以上 ±1.00。
+     和局賠率以 3 為起點每 0.25 一個區間:同區間=高度相符,相鄰區間=大致相符;小分賠率不當條件。
+     自動分級:同聯賽「高度相符」>=3 場就用高度;不足才放寬到「含大致相符」。 */
+  const tolO = o => o < 2 ? 0.10 : o < 3 ? 0.15 : o < 4 ? 0.20 : o < 5 ? 0.30 : o < 6 ? 0.50 : 1.00;
+  const drawBand = o => Math.floor((o - 3) / 0.25 + 1e-6);
   const ANOM = { maxN: 15, minShare: 0.7 };   // 異常篩選:同聯賽同賠率組合樣本 3~15 場,且結果(勝平負或大小分)>=70% 同向
-  function comboScan(db, m, L, tol) {
-    const c = [0, 0, 0], r = { tol, nAll: 0, nLg: 0, c, under: 0, over: 0 };
+  function comboScan(db, m, L) {
+    const th = tolO(m.oh) + 1e-4, ta = tolO(m.oa) + 1e-4, bd = drawBand(m.od);
+    const lv = [{ nAll: 0, nLg: 0, c: [0, 0, 0], under: 0, over: 0 }, { nAll: 0, nLg: 0, c: [0, 0, 0], under: 0, over: 0 }];
+    const rows = [];
     for (let i = 0; i < db.n; i++) {
-      if (!close(db.oh[i], m.oh, tol) || !close(db.od[i], m.od, tol) || !close(db.oa[i], m.oa, tol)) continue;
-      r.nAll++; if (db.l[i] !== L) continue;
-      r.nLg++; c[db.res[i]]++; if (db.tot[i] <= 2) r.under++; else r.over++;
+      if (Math.abs(db.oh[i] - m.oh) > th || Math.abs(db.oa[i] - m.oa) > ta) continue;
+      const dd = Math.abs(drawBand(db.od[i]) - bd); if (dd > 1) continue;
+      for (let k = dd; k < 2; k++) {
+        const g = lv[k]; g.nAll++; if (db.l[i] !== L) continue;
+        g.nLg++; g.c[db.res[i]]++; if (db.tot[i] <= 2) g.under++; else g.over++;
+      }
+      if (db.l[i] === L) rows.push([i, dd]);
     }
-    return r;
+    return { lv, rows };
   }
   const tierOf = (n, share) => n < 3 ? 3 : (n <= 15 && share >= 0.85) ? 0 : (n <= 30 && share >= 0.7) ? 1 : 2;
   function combo(db, m, L) {
-    if (!(m.oh > 0 && m.od > 0 && m.oa > 0) || L < 0) return { tol: 0, nAll: 0, nLg: 0, c: [0, 0, 0], under: 0, over: 0, lgShare: 0, hda: null, ou: null, share: 0, tier: 3 };
-    let r; for (const t of COMBO_TOL) { r = comboScan(db, m, L, t); if (r.nLg >= 3) break; }
+    if (!(m.oh > 0 && m.od > 0 && m.oa > 0) || L < 0) return { lvl: 0, tolTxt: '', nAll: 0, nLg: 0, c: [0, 0, 0], under: 0, over: 0, lgShare: 0, hda: null, ou: null, share: 0, tier: 3, prior: [] };
+    const sc = comboScan(db, m, L); const lvl = sc.lv[0].nLg >= 3 ? 0 : 1, g = sc.lv[lvl];
+    const r = { lvl, lvlTxt: lvl === 0 ? '高度相符' : '大致相符', tolTxt: '主±' + tolO(m.oh).toFixed(2) + '・客±' + tolO(m.oa).toFixed(2) + '・和局' + (lvl === 0 ? '同區間' : '±1區間'), nAll: g.nAll, nLg: g.nLg, c: g.c, under: g.under, over: g.over };
     r.lgShare = r.nAll ? r.nLg / r.nAll : 0;
     const od = [m.oh, m.od, m.oa]; let ti = 0; for (let j = 1; j < 3; j++) if (r.c[j] > r.c[ti] || (r.c[j] === r.c[ti] && od[j] < od[ti])) ti = j;
     r.hda = r.nLg ? { idx: ti, key: 'HDA'[ti], side: ['主', '和', '客'][ti], cnt: r.c[ti], share: r.c[ti] / r.nLg } : null;
     const nu = r.under + r.over;
     if (nu) { const u = r.under > r.over || (r.under === r.over && !(m.ov > 0 && m.ov < m.ou)); r.ou = u ? { key: 'U', side: '小', cnt: r.under, share: r.under / nu } : { key: 'O', side: '大', cnt: r.over, share: r.over / nu }; } else r.ou = null;
     r.share = Math.max(r.hda ? r.hda.share : 0, r.ou ? r.ou.share : 0); r.tier = tierOf(r.nLg, r.share);
+    /* 最近前例(同聯賽、符合本次分級),新到舊最多 5 場 */
+    r.prior = sc.rows.filter(x => x[1] <= lvl).sort((x, y) => db.d[y[0]] - db.d[x[0]]).slice(0, 5).map(([i, dd]) => ({ d: db.d[i], h: db.teams[db.h[i]], a: db.teams[db.a[i]], ga: db.ga[i], gh: db.gh[i], oh: +db.oh[i].toFixed(2), od: +db.od[i].toFixed(2), oa: +db.oa[i].toFixed(2), dd }));
     return r;
   }
   /* 同聯賽 + 同星期 + 開賽時間 ±30 分(不足 20 場放寬到 ±90 分)的前三高比分(客:主) */
