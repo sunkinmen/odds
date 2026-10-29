@@ -146,32 +146,92 @@
   }
 
 
-  /* ---- 鎖定邏輯 v1:同聯賽同賠率組合的「結果集中度」 ----
-     組合 = 主/和/客三個賠率都在 ±tol 內(先 3%,同聯賽不足 3 場才放寬到 5%、8%)。
-     集中度 = 同聯賽組合內,最多人出現的 主/和/客 結果占比,以及 小分(<=2球)/大分(>=3球) 占比。 */
-  const COMBO_TOL = [0.03, 0.05, 0.08];
+  /* ---- 鎖定邏輯 v2:以「主賠、客賠」為鍵的相近賠率(使用者手動規則自動化) ----
+     主/客賠率容許差(絕對值):1.x ±0.10、2.x ±0.15、3.x ±0.20、4.x ±0.30、5.x ±0.50、6 以上 ±1.00。
+     和局賠率以 3 為起點每 0.25 一個區間:同區間=高度相符,相鄰區間=大致相符;小分賠率不當條件。
+     自動分級:同聯賽「高度相符」>=3 場就用高度;不足才放寬到「含大致相符」。 */
+  const tolO = o => o < 2 ? 0.10 : o < 3 ? 0.15 : o < 4 ? 0.20 : o < 5 ? 0.30 : o < 6 ? 0.50 : 1.00;
+  const drawBand = o => Math.floor((o - 3) / 0.25 + 1e-6);
   const ANOM = { maxN: 15, minShare: 0.7 };   // 異常篩選:同聯賽同賠率組合樣本 3~15 場,且結果(勝平負或大小分)>=70% 同向
-  function comboScan(db, m, L, tol) {
-    const c = [0, 0, 0], r = { tol, nAll: 0, nLg: 0, c, under: 0, over: 0 };
+  function comboScan(db, m, L, asOf) {
+    const th = tolO(m.oh) + 1e-4, ta = tolO(m.oa) + 1e-4, bd = drawBand(m.od);
+    const lv = [{ nAll: 0, nLg: 0, c: [0, 0, 0], under: 0, over: 0 }, { nAll: 0, nLg: 0, c: [0, 0, 0], under: 0, over: 0 }];
+    const rows = [];
     for (let i = 0; i < db.n; i++) {
-      if (!close(db.oh[i], m.oh, tol) || !close(db.od[i], m.od, tol) || !close(db.oa[i], m.oa, tol)) continue;
-      r.nAll++; if (db.l[i] !== L) continue;
-      r.nLg++; c[db.res[i]]++; if (db.tot[i] <= 2) r.under++; else r.over++;
+      if (asOf && db.d[i] >= asOf) continue;
+      if (Math.abs(db.oh[i] - m.oh) > th || Math.abs(db.oa[i] - m.oa) > ta) continue;
+      const dd = Math.abs(drawBand(db.od[i]) - bd); if (dd > 1) continue;
+      for (let k = dd; k < 2; k++) {
+        const g = lv[k]; g.nAll++; if (db.l[i] !== L) continue;
+        g.nLg++; g.c[db.res[i]]++; if (db.tot[i] <= 2) g.under++; else g.over++;
+      }
+      if (db.l[i] === L) rows.push([i, dd]);
     }
-    return r;
+    return { lv, rows };
   }
-  const tierOf = (n, share) => n < 3 ? 3 : (n <= 15 && share >= 0.85) ? 0 : (n <= 30 && share >= 0.7) ? 1 : 2;
-  function combo(db, m, L) {
-    if (!(m.oh > 0 && m.od > 0 && m.oa > 0) || L < 0) return { tol: 0, nAll: 0, nLg: 0, c: [0, 0, 0], under: 0, over: 0, lgShare: 0, hda: null, ou: null, share: 0, tier: 3 };
-    let r; for (const t of COMBO_TOL) { r = comboScan(db, m, L, t); if (r.nLg >= 3) break; }
+  const tierOf = (n, share) => n < 3 ? 3 : (n <= 15 && share >= 0.78) ? 0 : (n <= 30 && share >= 0.7) ? 1 : 2;   // share = 貝氏收縮後機率
+  function combo(db, m, L, asOf) {
+    if (!(m.oh > 0 && m.od > 0 && m.oa > 0) || L < 0) return { lvl: 0, tolTxt: '', nAll: 0, nLg: 0, c: [0, 0, 0], under: 0, over: 0, lgShare: 0, hda: null, ou: null, share: 0, tier: 3, prior: [] };
+    const sc = comboScan(db, m, L, asOf); const lvl = sc.lv[0].nLg >= 3 ? 0 : 1, g = sc.lv[lvl];
+    const r = { lvl, lvlTxt: lvl === 0 ? '高度相符' : '大致相符', tolTxt: '主±' + tolO(m.oh).toFixed(2) + '・客±' + tolO(m.oa).toFixed(2) + '・和局' + (lvl === 0 ? '同區間' : '±1區間'), nAll: g.nAll, nLg: g.nLg, c: g.c, under: g.under, over: g.over };
     r.lgShare = r.nAll ? r.nLg / r.nAll : 0;
     const od = [m.oh, m.od, m.oa]; let ti = 0; for (let j = 1; j < 3; j++) if (r.c[j] > r.c[ti] || (r.c[j] === r.c[ti] && od[j] < od[ti])) ti = j;
+    const MM = root.OHM || (typeof require !== 'undefined' ? require('./model.js') : null), pm0 = MM ? MM.devig(od) : [1 / 3, 1 / 3, 1 / 3];
     r.hda = r.nLg ? { idx: ti, key: 'HDA'[ti], side: ['主', '和', '客'][ti], cnt: r.c[ti], share: r.c[ti] / r.nLg } : null;
+    if (r.hda && MM) r.hda.shr = MM.shrink(r.hda.cnt, r.nLg, pm0[ti], 8);   // 貝氏收縮:向市場去水位機率靠攏
     const nu = r.under + r.over;
-    if (nu) { const u = r.under > r.over || (r.under === r.over && !(m.ov > 0 && m.ov < m.ou)); r.ou = u ? { key: 'U', side: '小', cnt: r.under, share: r.under / nu } : { key: 'O', side: '大', cnt: r.over, share: r.over / nu }; } else r.ou = null;
-    r.share = Math.max(r.hda ? r.hda.share : 0, r.ou ? r.ou.share : 0); r.tier = tierOf(r.nLg, r.share);
+    if (nu) { const u = r.under > r.over || (r.under === r.over && !(m.ov > 0 && m.ov < m.ou)); r.ou = u ? { key: 'U', side: '小', cnt: r.under, share: r.under / nu } : { key: 'O', side: '大', cnt: r.over, share: r.over / nu };
+      const pu0 = m.ou > 0 ? (m.ov > 0 ? (1 / m.ou) / (1 / m.ou + 1 / m.ov) : interp(1 / m.ou, U_CAL)) : 0.5; if (MM) r.ou.shr = MM.shrink(r.ou.cnt, nu, u ? pu0 : 1 - pu0, 8); } else r.ou = null;
+    const sOf = x => x ? (x.shr ? x.shr.p : x.share) : 0;
+    r.share = Math.max(sOf(r.hda), sOf(r.ou)); r.tier = tierOf(r.nLg, r.share);
+    /* 最近前例(同聯賽、符合本次分級),新到舊最多 5 場 */
+    r.prior = sc.rows.filter(x => x[1] <= lvl).sort((x, y) => db.d[y[0]] - db.d[x[0]]).slice(0, 5).map(([i, dd]) => ({ d: db.d[i], h: db.teams[db.h[i]], a: db.teams[db.a[i]], ga: db.ga[i], gh: db.gh[i], oh: +db.oh[i].toFixed(2), od: +db.od[i].toFixed(2), oa: +db.oa[i].toFixed(2), dd }));
     return r;
   }
+  /* ---- 三組「相近賠率」常見比分(同聯賽) ----
+     home: 這支主隊「主場」在相近賠率組合下的歷史比分;away: 這支客隊「客場」在相近賠率組合下;
+     slot: 同聯賽所有球隊,同星期、開賽時間相近(±30分,不足放寬到 ±90、±180)且相近賠率組合下。
+     相近賠率=主客賠率在分段容許差內,和局同 0.25 區間(高度相符)或相鄰區間(大致相符);樣本不足 3 場時自動放寬。 */
+  function pack(rows, db) {
+    const counts = {}; rows.forEach(i => { const k = db.ga[i] + ':' + db.gh[i]; counts[k] = (counts[k] || 0) + 1; });
+    const top = Object.keys(counts).map(k => { const [a, h] = k.split(':').map(Number); return { a, h, cnt: counts[k] }; }).sort((x, y) => y.cnt - x.cnt || (y.a + y.h) - (x.a + x.h)).slice(0, 3);
+    return { n: rows.length, counts, top };
+  }
+  function simSources(db, m, H, A, L, asOf) {
+    const out = { home: null, away: null, slot: null };
+    if (L < 0 || !(m.oh > 0 && m.od > 0 && m.oa > 0)) return out;
+    const th = tolO(m.oh) + 1e-4, ta = tolO(m.oa) + 1e-4, bd = drawBand(m.od);
+    const hr = [], ar = [], sr = [];
+    for (const i of db.lgRows[L]) {
+      if (asOf && db.d[i] >= asOf) continue;
+      if (Math.abs(db.oh[i] - m.oh) > th || Math.abs(db.oa[i] - m.oa) > ta) continue;
+      const dd = Math.abs(drawBand(db.od[i]) - bd); if (dd > 1) continue;
+      if (H >= 0 && db.h[i] === H) hr.push([i, dd]);
+      if (A >= 0 && db.a[i] === A) ar.push([i, dd]);
+      if (m.weekday != null && m.minutes != null && db.w[i] === m.weekday && db.t[i] >= 0) sr.push([i, dd, Math.abs(db.t[i] * 5 - m.minutes)]);
+    }
+    const lvlOf = (rows) => { const n0 = rows.filter(r => r[1] === 0).length; return n0 >= 3 ? 0 : 1; };
+    [['home', hr], ['away', ar]].forEach(([k, rows]) => { const lv = lvlOf(rows), pick = rows.filter(r => r[1] <= lv).map(r => r[0]); out[k] = Object.assign(pack(pick, db), { lvl: lv }); });
+    if (sr.length) {
+      for (const [lv, win] of [[0, 30], [1, 30], [1, 90], [1, 180]]) {
+        const pick = sr.filter(r => r[1] <= lv && r[2] <= win).map(r => r[0]);
+        out.slot = Object.assign(pack(pick, db), { lvl: lv, win }); if (pick.length >= 3) break;
+      }
+    } else out.slot = Object.assign(pack([], db), { lvl: 1, win: 180 });
+    return out;
+  }
+  /* 綜整前三比分:市場隱含進球模型(先驗)+ 三組歷史比分(證據)貝氏合併 */
+  function recScores(db, m, H, A, L, asOf, opt) {
+    const M = (root.OHM || (typeof require !== 'undefined' ? require('./model.js') : null)); if (!M) return null;
+    opt = opt || {};
+    let pU = null; if (m.ou > 0) pU = m.ov > 0 ? (1 / m.ou) / (1 / m.ou + 1 / m.ov) : interp(1 / m.ou, U_CAL);
+    const sm = M.scoreModel(m.oh, m.od, m.oa, pU);
+    const src = simSources(db, m, H, A, L, asOf);
+    const list = ['home', 'away', 'slot'].map(k => src[k] ? { n: src[k].n, counts: src[k].counts, w: opt.w ? opt.w[k] : 1 } : null);
+    const post = M.blendScores(sm.M, list, { alpha: opt.alpha || 12, cap: opt.cap || 25 });
+    return { model: sm, src, top: post.slice(0, 3), modelTop: M.modelTop(sm.M, 3) };
+  }
+
   /* 同聯賽 + 同星期 + 開賽時間 ±30 分(不足 20 場放寬到 ±90 分)的前三高比分(客:主) */
   function slotScores(db, L, w, minutes) {
     if (L < 0 || w == null || minutes == null) return null;
@@ -257,7 +317,7 @@
     return {
       tail, scoreSum, resolved: { home: H, away: A, leagueId, league: leagueId >= 0 ? db.leagues[leagueId] : null },
       strongHome, strongName: strongHome ? m.home : m.away, weakName: strongHome ? m.away : m.home,
-      layers: L, anomaly, pm, p, pBlend, pu, qS, combo: combo(db, m, leagueId), slot: slotScores(db, leagueId, m.weekday, m.minutes),
+      layers: L, anomaly, pm, p, pBlend, pu, qS, combo: combo(db, m, leagueId), slot: slotScores(db, leagueId, m.weekday, m.minutes), rec: recScores(db, m, H.id, A.id, leagueId),
       oddsBySide: strongHome ? { 0: m.oh, 1: m.od, 2: m.oa } : { 0: m.oa, 1: m.od, 2: m.oh },
       // 轉成「主/和/客」選項
       toHDA(idx) { return strongHome ? ['主', '和', '客'][idx] : ['客', '和', '主'][idx]; },
@@ -282,15 +342,15 @@
     const cb = an.combo || null, mk = k => cand.find(c => c.key === k) || null;
     const lg = cb && cb.nLg >= 3;
     let t1 = null, t2 = null;
-    if (lg && cb.hda) { t1 = mk(cb.hda.key); if (t1) t1.cx = { share: cb.hda.share, cnt: cb.hda.cnt, n: cb.nLg, src: 'league' }; }
+    if (lg && cb.hda) { t1 = mk(cb.hda.key); if (t1) t1.cx = { share: cb.hda.shr ? cb.hda.shr.p : cb.hda.share, raw: cb.hda.share, cnt: cb.hda.cnt, n: cb.nLg, src: 'league' }; }
     if (!t1) t1 = cand.filter(c => c.market === '勝平負' && c.odds > 1).sort((a, b) => a.odds - b.odds)[0] || null;
-    if (lg && cb.ou) { t2 = mk(cb.ou.key); if (t2) t2.cx = { share: cb.ou.share, cnt: cb.ou.cnt, n: cb.nLg, src: 'league' }; }
+    if (lg && cb.ou) { t2 = mk(cb.ou.key); if (t2) t2.cx = { share: cb.ou.shr ? cb.ou.shr.p : cb.ou.share, raw: cb.ou.share, cnt: cb.ou.cnt, n: cb.nLg, src: 'league' }; }
     if (!t2) { const U = mk('U'), O = mk('O'); t2 = U && O ? (an.pu.market >= 0.5 ? U : O) : (U || null); }
     const ok = [t1, t2].filter(c => c && c.cx && c.cx.src === 'league' && c.cx.share >= ANOM.minShare && c.cx.n <= ANOM.maxN && c.odds >= (minOdds || 1.3));
     ok.sort((a, b) => b.cx.share - a.cx.share || a.cx.n - b.cx.n);
     return { all: cand, best: ok[0] || null, t1, t2 };
   }
 
-  const api = { load, analyze, mlProb, pickBest, resolveTeam, norm, MIN_N, histRoi, combo, slotScores, tierOf, ANOM };
+  const api = { load, analyze, mlProb, pickBest, resolveTeam, norm, MIN_N, histRoi, combo, slotScores, tierOf, ANOM, simSources, recScores, tolO, drawBand };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OH = api;
 })(typeof self !== 'undefined' ? self : this);
