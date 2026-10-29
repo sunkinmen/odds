@@ -71,7 +71,7 @@ details.note p{margin:8px 2px 0;line-height:1.6;color:var(--ink)}
 .match.silver .mbadge{color:#2b2f34}.match.bronze .mbadge{color:#fff4e8}
 @keyframes mshine{0%{background-position:0 0,0% 50%}100%{background-position:0 0,300% 50%}}
 @media (prefers-reduced-motion:reduce){.match.medal,.mbadge{animation:none}}
-.sortbar{display:flex;align-items:center;gap:6px;margin:10px 2px 0;font-size:12.5px;color:var(--mute)}.sortbar button{border:1px solid var(--line);background:var(--paper);color:var(--ink,inherit);border-radius:999px;padding:5px 14px;font-size:13px}.sortbar button.on{background:var(--deep);color:#fff;border-color:var(--deep)}.mt .rk{display:block;margin-top:6px;font-style:normal;font-size:11px;font-weight:700;color:var(--mute)}
+.sortbar{display:flex;align-items:center;justify-content:center;gap:6px;margin:10px 2px 0;font-size:12.5px;color:var(--mute)}.sortbar button{border:1px solid var(--line);background:var(--paper);color:var(--ink,inherit);border-radius:999px;padding:5px 14px;font-size:13px}.sortbar button.on{background:var(--deep);color:#fff;border-color:var(--deep)}.mt .rk{display:block;margin-top:6px;font-style:normal;font-size:11px;font-weight:700;color:var(--mute)}
 .match::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--rail,var(--line))}
 .match.pick{--rail:var(--sage)}.match.skip{--rail:var(--clay)}.match.flag{--rail:var(--sand)}
 .mt{padding-left:16px;text-align:left}
@@ -85,7 +85,8 @@ details.note p{margin:8px 2px 0;line-height:1.6;color:var(--ink)}
 .o i{display:block;font-style:normal;font-size:10.5px;font-weight:500;color:var(--mute);letter-spacing:.1em}
 .o.hit{background:var(--deep);border-color:var(--deep);color:#f3efe9}
 .o.hit i{color:#cfd9cf}
-.o.u{background:transparent;border-style:dashed}
+.o.u{background:transparent;border-style:dotted}
+.o.fav{position:relative}.o.fav::after{content:"";position:absolute;inset:-3px;border:2px dashed var(--deep);border-radius:13px;pointer-events:none}
 .o.u.hit{background:var(--mist);border-color:var(--mist);color:#1f2a30;border-style:solid}
 .o.u.hit i{color:#2c3b44}
 .verdict{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:13px;flex-wrap:wrap}
@@ -162,7 +163,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 <div class="top">
   <div class="brand">
     <div class="mark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
-    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.19</small></div>
+    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.20</small></div>
   </div>
   <div class="days" id="days"></div>
 </div>
@@ -170,10 +171,10 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 <main id="tab-matches" class="wrap">
   <div class="row" style="margin-top:2px">
     <button class="btn sm" id="bSync">更新賽事</button>
-    <span class="grow"></span>
+    <span class="hint grow" id="impMsg" style="white-space:pre-wrap;margin:0;min-width:0"></span>
     <button class="btn line sm" id="bClear">清空</button>
   </div>
-  <details class="note" style="margin-top:8px"><summary>進階:手動匯入</summary>
+  <details class="note" style="margin-top:8px" hidden><summary>進階:手動匯入</summary>
     <div class="row" style="margin-top:8px"><button class="btn alt sm" id="bPaste">貼上匯入</button><button class="btn alt sm" id="bHelp">抓取說明</button><button class="btn alt sm" id="bAdd">手動新增</button></div>
   </details>
   <div class="panel" id="importBox" style="display:none">
@@ -199,9 +200,9 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
     </ol>
     <div class="hint">iPhone 的網頁 App 不能在背景偷跑,最自動的程度就是「開 App 時自動更新」。運彩官網原本的書籤仍保留在設定頁,可抓最低串數等玩運彩沒有的資訊。</div>
   </div>
-  <div class="hint" id="impMsg" style="white-space:pre-wrap"></div>
-  <details class="note"><summary>⚠ 先看回測結論</summary><p>用 2022–2023 預測 2025(6,000 場):相近賠率的歷史結果,並沒有比「直接選熱門」更準,長期 ROI 約 −15%;莊家抽水約 22%。這裡給的是歷史傾向,不是穩贏保證,請控制金額。</p></details>
+  <details class="note" hidden><summary>⚠ 先看回測結論</summary><p>用 2022–2023 預測 2025(6,000 場):相近賠率的歷史結果,並沒有比「直接選熱門」更準,長期 ROI 約 −15%;莊家抽水約 22%。這裡給的是歷史傾向,不是穩贏保證,請控制金額。</p></details>
   <div class="sortbar" id="sortBar"><span>排序</span><button data-m="best">最佳</button><button data-m="high">高賠</button></div>
+  <div class="hint" style="text-align:center;margin:6px 8px 0">虛線外框＝每場在「勝平負」與「大小分」各自期望值最高的選項(僅供參考,多半仍低於 100 元);深色實心＝系統建議</div>
   <div id="list"></div>
   <div class="hint" id="skipMsg" style="text-align:center"></div>
 </main>
@@ -318,12 +319,12 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
   btns.forEach(function(b){b.addEventListener('click',function(){go(b.getAttribute('data-t'))})});
 })();
 </script>
-<script src="engine.js?v=319"></script>
-<script src="parlay.js?v=319"></script>
-<script src="advisor.js?v=319"></script>
-<script src="importer.js?v=319"></script>
-<script src="dataload.js?v=319"></script>
-<script src="track.js?v=319"></script>
-<script src="app.js?v=319"></script>
+<script src="engine.js?v=320"></script>
+<script src="parlay.js?v=320"></script>
+<script src="advisor.js?v=320"></script>
+<script src="importer.js?v=320"></script>
+<script src="dataload.js?v=320"></script>
+<script src="track.js?v=320"></script>
+<script src="app.js?v=320"></script>
 </body>
 </html>
