@@ -1,5 +1,5 @@
-const V = 'oh-v326';
-const FILES = ['./', 'index.html', 'model.js?v=326', 'engine.js?v=326', 'parlay.js?v=326', 'advisor.js?v=326', 'importer.js?v=326', 'dataload.js?v=326', 'track.js?v=326', 'app.js?v=326', 'manifest.json', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'data/matches.json'];
+const V = 'oh-v327';
+const FILES = ['./', 'index.html', 'model.js?v=327', 'engine.js?v=327', 'parlay.js?v=327', 'advisor.js?v=327', 'importer.js?v=327', 'dataload.js?v=327', 'track.js?v=327', 'app.js?v=327', 'manifest.json', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'data/matches.json'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => Promise.all(FILES.map(f => c.add(f).catch(() => { })))).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
