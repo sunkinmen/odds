@@ -164,7 +164,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
 <div class="top">
   <div class="brand">
     <div class="mark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
-    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.21</small></div>
+    <div><h1>賠率獵人</h1><small><span id="dbstat">載入歷史資料…</span> · v3.22</small></div>
   </div>
   <div class="days" id="days"></div>
 </div>
@@ -203,7 +203,8 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
   </div>
   <details class="note" hidden><summary>⚠ 先看回測結論</summary><p>用 2022–2023 預測 2025(6,000 場):相近賠率的歷史結果,並沒有比「直接選熱門」更準,長期 ROI 約 −15%;莊家抽水約 22%。這裡給的是歷史傾向,不是穩贏保證,請控制金額。</p></details>
   <div class="sortbar" id="sortBar"><span>排序</span><button data-m="best">最佳</button><button data-m="high">高賠</button></div>
-  <div class="hint" style="text-align:center;margin:6px 8px 0">虛線外框＝每場「勝平負」「大小分」各自在同聯賽、同賠率組合中結果最集中的選項(沒有樣本就取市場熱門);深色實心＝其中集中度≥70%、賠率達標的建議。<br>回測(2026)提醒:這類組合命中率約 55–68%,但多半是低賠熱門;和同賠率的一般場次相比沒有顯著優勢,長期仍約虧 10%。</div>
+  <div class="hint" style="text-align:center;margin:6px 8px 0">異常篩選:同聯賽、同賠率組合只有 3–15 場且結果 ≥70% 同向才算異常,只有異常場次會有金銀銅與深色實心建議;虛線外框＝每場兩個市場各自最集中的選項(供有興趣的場次參考,沒有樣本就取市場熱門)。<br>回測(2026):此條件約每天 6 場、命中率約 50–57%,平均報酬仍約 −10~−14%;目前沒有證據證明能抓到協議球,請當篩選參考。</div>
+  <div class="hint" id="anomMsg" style="text-align:center;margin:8px 8px 0;font-size:13px"></div>
   <div id="list"></div>
   <div class="hint" id="skipMsg" style="text-align:center"></div>
 </main>
@@ -320,12 +321,12 @@ pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:9px;b
   btns.forEach(function(b){b.addEventListener('click',function(){go(b.getAttribute('data-t'))})});
 })();
 </script>
-<script src="engine.js?v=321"></script>
-<script src="parlay.js?v=321"></script>
-<script src="advisor.js?v=321"></script>
-<script src="importer.js?v=321"></script>
-<script src="dataload.js?v=321"></script>
-<script src="track.js?v=321"></script>
-<script src="app.js?v=321"></script>
+<script src="engine.js?v=322"></script>
+<script src="parlay.js?v=322"></script>
+<script src="advisor.js?v=322"></script>
+<script src="importer.js?v=322"></script>
+<script src="dataload.js?v=322"></script>
+<script src="track.js?v=322"></script>
+<script src="app.js?v=322"></script>
 </body>
 </html>
