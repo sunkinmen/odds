@@ -355,10 +355,14 @@
       if (c.cx && c.cx.src === 'league') arr.push(c.cx.share);
       return arr.reduce((x, y) => x + y, 0) / arr.length;
     };
-    const pick = [t1, t2].filter(Boolean);
-    pick.forEach(c => { c.conf = confOf(c); c.val = c.conf * c.odds; c.anom = !!(c.cx && c.cx.src === 'league' && c.cx.share >= ANOM.minShare && c.cx.n <= ANOM.maxN); });
-    pick.sort((x, y) => y.val - x.val);
-    return { all: cand, best: pick[0] || null, alt: pick[1] || null, t1, t2 };
+    /* v3.22 邏輯:異常(同聯賽 3~15 場、收縮後>=70%)優先、集中度高者先;低賠(< minOdds)一律不推薦。
+       非異常場次:在所有 >= minOdds 的選項中取「綜合機率×賠率」最高者(不再被市場熱門低賠綁住)。 */
+    const mo = minOdds || 1.6;
+    cand.forEach(c => { c.conf = confOf(c); c.val = c.conf * c.odds; c.anom = !!(c.cx && c.cx.src === 'league' && c.cx.share >= ANOM.minShare && c.cx.n <= ANOM.maxN); });
+    const pick = cand.filter(c => c.odds >= mo && c.conf >= 0.3);
+    pick.sort((x, y) => (y.anom - x.anom) || (x.anom && y.anom ? (y.cx.share - x.cx.share || x.cx.n - y.cx.n) : 0) || y.val - x.val);
+    const first = pick[0] || null, second = first ? pick.find(c => c.market !== first.market) || pick[1] || null : null;
+    return { all: cand, best: first, alt: second, t1, t2 };
   }
 
   const api = { load, analyze, mlProb, pickBest, resolveTeam, norm, MIN_N, histRoi, combo, slotScores, tierOf, ANOM, simSources, recScores, tolO, drawBand };
