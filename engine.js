@@ -145,6 +145,48 @@
     return { n, c, inv, under };
   }
 
+
+  /* ---- 鎖定邏輯 v1:同聯賽同賠率組合的「結果集中度」 ----
+     組合 = 主/和/客三個賠率都在 ±tol 內(先 3%,同聯賽不足 3 場才放寬到 5%、8%)。
+     集中度 = 同聯賽組合內,最多人出現的 主/和/客 結果占比,以及 小分(<=2球)/大分(>=3球) 占比。 */
+  const COMBO_TOL = [0.03, 0.05, 0.08];
+  function comboScan(db, m, L, tol) {
+    const c = [0, 0, 0], r = { tol, nAll: 0, nLg: 0, c, under: 0, over: 0 };
+    for (let i = 0; i < db.n; i++) {
+      if (!close(db.oh[i], m.oh, tol) || !close(db.od[i], m.od, tol) || !close(db.oa[i], m.oa, tol)) continue;
+      r.nAll++; if (db.l[i] !== L) continue;
+      r.nLg++; c[db.res[i]]++; if (db.tot[i] <= 2) r.under++; else r.over++;
+    }
+    return r;
+  }
+  const tierOf = (n, share) => n < 3 ? 3 : (n <= 15 && share >= 0.85) ? 0 : (n <= 30 && share >= 0.7) ? 1 : 2;
+  function combo(db, m, L) {
+    if (!(m.oh > 0 && m.od > 0 && m.oa > 0) || L < 0) return { tol: 0, nAll: 0, nLg: 0, c: [0, 0, 0], under: 0, over: 0, lgShare: 0, hda: null, ou: null, share: 0, tier: 3 };
+    let r; for (const t of COMBO_TOL) { r = comboScan(db, m, L, t); if (r.nLg >= 3) break; }
+    r.lgShare = r.nAll ? r.nLg / r.nAll : 0;
+    const od = [m.oh, m.od, m.oa]; let ti = 0; for (let j = 1; j < 3; j++) if (r.c[j] > r.c[ti] || (r.c[j] === r.c[ti] && od[j] < od[ti])) ti = j;
+    r.hda = r.nLg ? { idx: ti, key: 'HDA'[ti], side: ['主', '和', '客'][ti], cnt: r.c[ti], share: r.c[ti] / r.nLg } : null;
+    const nu = r.under + r.over;
+    if (nu) { const u = r.under > r.over || (r.under === r.over && !(m.ov > 0 && m.ov < m.ou)); r.ou = u ? { key: 'U', side: '小', cnt: r.under, share: r.under / nu } : { key: 'O', side: '大', cnt: r.over, share: r.over / nu }; } else r.ou = null;
+    r.share = Math.max(r.hda ? r.hda.share : 0, r.ou ? r.ou.share : 0); r.tier = tierOf(r.nLg, r.share);
+    return r;
+  }
+  /* 同聯賽 + 同星期 + 開賽時間 ±30 分(不足 20 場放寬到 ±90 分)的前三高比分(客:主) */
+  function slotScores(db, L, w, minutes) {
+    if (L < 0 || w == null || minutes == null) return null;
+    let res = null;
+    for (const win of [30, 90]) {
+      const cnt = new Map(); let n = 0;
+      for (const i of db.lgRows[L]) {
+        if (db.w[i] !== w || db.t[i] < 0 || Math.abs(db.t[i] * 5 - minutes) > win) continue;
+        n++; const k = db.ga[i] + ':' + db.gh[i]; cnt.set(k, (cnt.get(k) || 0) + 1);
+      }
+      res = { n, win, top: [...cnt.entries()].sort((x, y) => y[1] - x[1]).slice(0, 3).map(([k, v]) => { const [a, h] = k.split(':').map(Number); return { a, h, cnt: v }; }) };
+      if (n >= 20) break;
+    }
+    return res;
+  }
+
   /* m: {league, home, away, oh, od, oa, ou, weekday(0=週一), minutes} */
   function analyze(db, m, opt) {
     opt = opt || {};
@@ -214,7 +256,7 @@
     return {
       tail, scoreSum, resolved: { home: H, away: A, leagueId, league: leagueId >= 0 ? db.leagues[leagueId] : null },
       strongHome, strongName: strongHome ? m.home : m.away, weakName: strongHome ? m.away : m.home,
-      layers: L, anomaly, pm, p, pBlend, pu, qS,
+      layers: L, anomaly, pm, p, pBlend, pu, qS, combo: combo(db, m, leagueId), slot: slotScores(db, leagueId, m.weekday, m.minutes),
       oddsBySide: strongHome ? { 0: m.oh, 1: m.od, 2: m.oa } : { 0: m.oa, 1: m.od, 2: m.oh },
       // 轉成「主/和/客」選項
       toHDA(idx) { return strongHome ? ['主', '和', '客'][idx] : ['客', '和', '主'][idx]; },
@@ -233,10 +275,21 @@
     (an.tail || []).filter(t => t.flag).forEach(t => cand.push({ market: '大分', side: '大' + t.line, key: t.key, idx: t.key, odds: t.odds, p: t.p, pm: t.pm, ev: t.ev }));
     cand.forEach(c => { c.hist = db ? histRoi(db, c.key, c.odds) : null; });
     cand.sort((a, b) => b.ev - a.ev);
-    const ok = cand.filter(c => c.odds >= (minOdds || 1.3) && c.p >= (minProb || 0));
-    return { all: cand, best: ok[0] || null };
+    /* 鎖定邏輯:每場「勝平負」「大小分」各取一個最佳(t1/t2)。
+       有同聯賽同賠率樣本(>=3 場)→ 取結果最集中者;沒有 → 取市場熱門(最低賠率 / 去水位後機率較高的一邊)。
+       建議(實心)只會從 t1/t2 之中挑:樣本>=3、集中度>=70%、賠率>=minOdds,集中度高者優先,所以實心必然與虛線重疊。 */
+    const cb = an.combo || null, mk = k => cand.find(c => c.key === k) || null;
+    const lg = cb && cb.nLg >= 3;
+    let t1 = null, t2 = null;
+    if (lg && cb.hda) { t1 = mk(cb.hda.key); if (t1) t1.cx = { share: cb.hda.share, cnt: cb.hda.cnt, n: cb.nLg, src: 'league' }; }
+    if (!t1) t1 = cand.filter(c => c.market === '勝平負' && c.odds > 1).sort((a, b) => a.odds - b.odds)[0] || null;
+    if (lg && cb.ou) { t2 = mk(cb.ou.key); if (t2) t2.cx = { share: cb.ou.share, cnt: cb.ou.cnt, n: cb.nLg, src: 'league' }; }
+    if (!t2) { const U = mk('U'), O = mk('O'); t2 = U && O ? (an.pu.market >= 0.5 ? U : O) : (U || null); }
+    const ok = [t1, t2].filter(c => c && c.cx && c.cx.src === 'league' && c.cx.share >= 0.7 && c.odds >= (minOdds || 1.3));
+    ok.sort((a, b) => b.cx.share - a.cx.share || a.cx.n - b.cx.n);
+    return { all: cand, best: ok[0] || null, t1, t2 };
   }
 
-  const api = { load, analyze, mlProb, pickBest, resolveTeam, norm, MIN_N, histRoi };
+  const api = { load, analyze, mlProb, pickBest, resolveTeam, norm, MIN_N, histRoi, combo, slotScores, tierOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.OH = api;
 })(typeof self !== 'undefined' ? self : this);
