@@ -148,10 +148,12 @@
     }
     const pk = hit && hit.market === '勝平負' ? hit.side : null, pu = hit && hit.key === 'U', po = hit && hit.key === 'O';
     const ex = (a && a.an.resolved.league) || '';
+    const f1 = a ? a.pb.all.find(c => c.market === '勝平負') : null, f2 = a ? a.pb.all.find(c => c.key === 'U' || c.key === 'O') : null;   // 每場兩個市場各自期望值最高者(虛線框)
+    const fv = (cond) => cond ? ' fav' : '';
     return `<article class="match ${cls}${medal != null ? ' medal ' + MEDAL[medal][0] : ''}" data-id="${esc(m.id)}">${medal != null ? `<span class="mbadge">${MEDAL[medal][1]} · 今日第 ${medal + 1} 名</span>` : ''}
       <div class="mt"><b>${esc(m.time || '--:--')}</b><span>${esc(SHORT(m.league || ex))}</span>${rank != null ? `<i class="rk">#${rank + 1}</i>` : ''}</div>
       <div><div class="teams">${esc(m.away)}<span class="at">@</span>${esc(m.home)}</div>
-        <div class="odds"><div class="o ${pk === '客' ? 'hit' : ''}"><i>客</i>${m.oa}</div><div class="o ${pk === '和' ? 'hit' : ''}"><i>和</i>${m.od}</div><div class="o ${pk === '主' ? 'hit' : ''}"><i>主</i>${m.oh}</div>${m.ou ? `<div class="o u ${pu ? 'hit' : ''}"><i>小</i>${m.ou}</div>` : '<div></div>'}${m.ov ? `<div class="o u ${po ? 'hit' : ''}"><i>大</i>${m.ov}</div>` : '<div></div>'}</div>
+        <div class="odds"><div class="o ${pk === '客' ? 'hit' : ''}${fv(f1 && f1.side === '客')}"><i>客</i>${m.oa}</div><div class="o ${pk === '和' ? 'hit' : ''}${fv(f1 && f1.side === '和')}"><i>和</i>${m.od}</div><div class="o ${pk === '主' ? 'hit' : ''}${fv(f1 && f1.side === '主')}"><i>主</i>${m.oh}</div>${m.ou ? `<div class="o u ${pu ? 'hit' : ''}${fv(f2 && f2.key === 'U')}"><i>小</i>${m.ou}</div>` : '<div></div>'}${m.ov ? `<div class="o u ${po ? 'hit' : ''}${fv(f2 && f2.key === 'O')}"><i>大</i>${m.ov}</div>` : '<div></div>'}</div>
         <div class="verdict">${hp ? `<span class="tag">高賠首選 ${hp.key === 'U' ? '小分' : hp.key === 'O' ? '大分' : hp.side} @${hp.odds}・機率 ${pct(hp.p)}</span>` : ''}${verdict}</div></div>${det}</article>`;
   }
   const EMPTY = '<div class="empty"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M3.5 9.5h17"/></svg><div>這天還沒有賽事</div><div class="hint">用上方「貼上匯入 / 連線抓取 / 手動新增」加入運彩賽事</div></div>';
