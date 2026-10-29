@@ -130,9 +130,8 @@
       const parts = [];
       if (cb.hda) parts.push(`${cb.hda.side}${cb.hda.side === '和' ? '' : '勝'} ${pct(cb.hda.share)}(${cb.hda.cnt}/${cb.nLg})`);
       if (cb.ou) parts.push(`${cb.ou.side}分 ${pct(cb.ou.share)}(${cb.ou.cnt}/${cb.nLg})`);
-      h += `<div class="cx"><b>同聯賽主客賠率${cb.lvlTxt}</b>(${cb.tolTxt}) ${cb.nLg} 場,全聯賽 ${cb.nAll} 場:${parts.join('・')}</div>`;
-      if (cb.prior && cb.prior.length) h += `<div class="cx"><b>最近前例</b> ${cb.prior.map(p => `${String(p.d).replace(/^(\d\d)(\d\d)(\d\d)$/, '$1/$2/$3')} ${esc(p.a)}@${esc(p.h)} 客${p.ga}:主${p.gh}(${p.oh}/${p.od}/${p.oa}${p.dd ? '・和局近似' : ''})`).join('、')}</div>`;
-    } else h += `<div class="cx dim"><b>同聯賽主客賠率相近</b>只有 ${cb ? cb.nLg : 0} 場,樣本不足;虛線改取市場熱門</div>`;
+      h += `<div class="cx"><b>同聯賽同賠率(±${Math.round(cb.tol * 100)}%)</b> ${cb.nLg} 場,全聯賽 ${cb.nAll} 場:${parts.join('・')}</div>`;
+    } else h += `<div class="cx dim"><b>同聯賽同賠率</b>只有 ${cb ? cb.nLg : 0} 場,樣本不足;虛線改取市場熱門</div>`;
     if (sl && sl.top.length && m.weekday != null) h += `<div class="cx"><b>同聯賽${WDN[m.weekday] || ''} ${esc(m.time || '')}±${sl.win}分</b> ${sl.n} 場,前三高比分:${sl.top.map(t => `客${t.a}:主${t.h}(${t.cnt})`).join('、')}</div>`;
     return h;
   }
